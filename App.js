@@ -10,6 +10,10 @@ import MetronomeScreen from './src/screens/MetronomeScreen';
 import TargetsScreen from './src/screens/TargetsScreen';
 import RunnerProfileSetup from './src/screens/RunnerProfileSetup';
 import analytics from './src/services/AnalyticsService';
+import CrashReportingService from './src/services/CrashReportingService';
+
+// Initialize crash reporting as early as possible
+CrashReportingService.initialize();
 
 const Tab = createBottomTabNavigator();
 

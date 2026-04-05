@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from
 import { getRunnerProfile } from '../utils/storage';
 import analytics from '../services/AnalyticsService';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
+import FeedbackModal from '../components/FeedbackModal';
 
 const { width } = Dimensions.get('window');
 
@@ -10,6 +11,7 @@ export default function HomeScreen({ navigation }) {
   const [hasProfile, setHasProfile] = useState(false);
   const [profile, setProfile] = useState(null);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
 
   useEffect(() => {
     checkProfile();
@@ -147,7 +149,15 @@ export default function HomeScreen({ navigation }) {
       {/* Bottom Spacer */}
       <View style={styles.bottomSpacer} />
       
-      {/* Analytics Dashboard (Development) */}
+      {/* Floating Action Buttons */}
+      <TouchableOpacity 
+        style={styles.feedbackButton}
+        onPress={() => setShowFeedback(true)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.feedbackButtonText}>💬</Text>
+      </TouchableOpacity>
+      
       <TouchableOpacity 
         style={styles.analyticsButton}
         onPress={() => setShowAnalytics(true)}
@@ -156,6 +166,12 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.analyticsButtonText}>📊</Text>
       </TouchableOpacity>
     </ScrollView>
+    
+    {/* Feedback Modal */}
+    <FeedbackModal
+      visible={showFeedback}
+      onClose={() => setShowFeedback(false)}
+    />
     
     {/* Analytics Dashboard Modal */}
     <AnalyticsDashboard 
@@ -393,6 +409,27 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   analyticsButtonText: {
+    fontSize: 20,
+  },
+  
+  // Feedback Button
+  feedbackButton: {
+    position: 'absolute',
+    bottom: 160,
+    right: 20,
+    width: 50,
+    height: 50,
+    backgroundColor: '#000000',
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  feedbackButtonText: {
     fontSize: 20,
   },
 });

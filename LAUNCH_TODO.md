@@ -41,17 +41,19 @@
 - [x] Verify PRIVACY_POLICY.md is up to date with current app behavior
 
 ## App Store Connect Setup
-- [ ] App record created in App Store Connect
-- [ ] Bundle ID registered (com.strdr.app)
-- [ ] Signing certificates and provisioning profiles set up for distribution
-- [ ] Build uploaded via Xcode or Transporter
+- [x] App record created in App Store Connect
+- [x] Bundle ID registered (com.strdr.app)
+- [x] Signing certificates and provisioning profiles set up for distribution
+- [x] Build uploaded via EAS Submit (build 21, TestFlight approved)
 - [ ] App information filled out (subtitle, promotional text, support URL)
 - [ ] Contact information and demo account (if needed for review)
 - [ ] Set pricing (free, paid, or freemium)
 - [ ] Set availability (countries/regions)
 
 ## Production Infrastructure
-- [ ] Crash reporting service integrated (Sentry, Bugsnag, or similar)
+- [x] Crash reporting service integrated (local CrashReportingService)
+- [x] In-app feedback / bug reporting tool built in
+- [x] Set up support response workflow (24-48hr response time)
 - [x] Analytics working and capturing key events
 - [ ] Check final app bundle size — aim for under 50MB
 - [x] Verify "uses non-exempt encryption" is set to NO
