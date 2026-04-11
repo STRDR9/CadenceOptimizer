@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { getRunnerProfile } from '../utils/storage';
 import analytics from '../services/AnalyticsService';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
@@ -16,6 +17,13 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => {
     checkProfile();
   }, []);
+
+  // Re-check profile every time the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      checkProfile();
+    }, [])
+  );
 
   const checkProfile = async () => {
     try {
@@ -51,6 +59,90 @@ export default function HomeScreen({ navigation }) {
   );
 
   return (
+    <>
+    {!hasProfile ? (
+      // ONBOARDING: No profile yet — guide user to set one up
+      <View style={styles.container}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.onboardingContent}>
+          <View style={styles.logoSection}>
+            <Text style={styles.logoText}>STRDR</Text>
+            <Text style={styles.subheaderText}>Cadence and Speed Optimizer</Text>
+          </View>
+
+          <View style={styles.welcomeSection}>
+            <Text style={styles.welcomeTitle}>Welcome, Runner</Text>
+            <Text style={styles.welcomeBody}>
+              STRDR personalizes everything — cadence targets, workout intensity, race predictions — based on your profile.
+            </Text>
+            <Text style={styles.welcomeBody}>
+              Let's get you set up. It takes about 2 minutes.
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.setupButton}
+            onPress={() => {
+              analytics.trackUserAction('navigation', { destination: 'Profile', source: 'onboarding' });
+              navigation.navigate('Profile');
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.setupButtonText}>SET UP YOUR PROFILE</Text>
+            <Text style={styles.setupButtonArrow}>→</Text>
+          </TouchableOpacity>
+
+          <View style={styles.featurePreview}>
+            <Text style={styles.featurePreviewTitle}>WHAT YOU'LL UNLOCK</Text>
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>🎵</Text>
+              <View style={styles.featureTextWrap}>
+                <Text style={styles.featureLabel}>Smart Metronome</Text>
+                <Text style={styles.featureDesc}>5 training modes with personalized cadence</Text>
+              </View>
+            </View>
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>🎯</Text>
+              <View style={styles.featureTextWrap}>
+                <Text style={styles.featureLabel}>Race Calculator</Text>
+                <Text style={styles.featureDesc}>Cadence, pace, and stride targets for race day</Text>
+              </View>
+            </View>
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>🗣️</Text>
+              <View style={styles.featureTextWrap}>
+                <Text style={styles.featureLabel}>Voice Coaching</Text>
+                <Text style={styles.featureDesc}>Hands-free guidance during structured workouts</Text>
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.skipLink}
+            onPress={() => {
+              analytics.trackUserAction('navigation', { destination: 'Metronome', source: 'onboarding_skip' });
+              navigation.navigate('Metronome');
+            }}
+          >
+            <Text style={styles.skipLinkText}>Skip for now — go straight to the metronome</Text>
+          </TouchableOpacity>
+        </ScrollView>
+
+        {/* Feedback button still available */}
+        <TouchableOpacity
+          style={styles.feedbackButton}
+          onPress={() => setShowFeedback(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.feedbackButtonText}>💬</Text>
+        </TouchableOpacity>
+
+        <FeedbackModal
+          visible={showFeedback}
+          onClose={() => setShowFeedback(false)}
+        />
+      </View>
+    ) : (
+    // MAIN HOME: Profile exists — show workout-focused home
     <>
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Logo Section */}
@@ -178,6 +270,8 @@ export default function HomeScreen({ navigation }) {
       visible={showAnalytics}
       onClose={() => setShowAnalytics(false)}
     />
+    </>
+    )}
     </>
   );
 }
@@ -431,5 +525,104 @@ const styles = StyleSheet.create({
   },
   feedbackButtonText: {
     fontSize: 20,
+  },
+
+  // Onboarding Styles
+  onboardingContent: {
+    paddingBottom: 60,
+  },
+  welcomeSection: {
+    paddingHorizontal: 24,
+    marginBottom: 32,
+  },
+  welcomeTitle: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#000',
+    letterSpacing: 1,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  welcomeBody: {
+    fontSize: 16,
+    color: '#666',
+    lineHeight: 24,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  setupButton: {
+    flexDirection: 'row',
+    backgroundColor: '#000',
+    marginHorizontal: 24,
+    paddingVertical: 20,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 40,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  setupButtonText: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+  setupButtonArrow: {
+    color: '#FFF',
+    fontSize: 22,
+    fontWeight: '800',
+    marginLeft: 12,
+  },
+  featurePreview: {
+    paddingHorizontal: 24,
+    marginBottom: 32,
+  },
+  featurePreviewTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: '#999',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+  },
+  featureIcon: {
+    fontSize: 24,
+    marginRight: 16,
+  },
+  featureTextWrap: {
+    flex: 1,
+  },
+  featureLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000',
+    marginBottom: 2,
+  },
+  featureDesc: {
+    fontSize: 14,
+    color: '#666',
+  },
+  skipLink: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  skipLinkText: {
+    fontSize: 14,
+    color: '#999',
+    textDecorationLine: 'underline',
   },
 });

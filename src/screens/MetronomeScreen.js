@@ -8,6 +8,9 @@ import WorkoutEngine from '../services/WorkoutEngine';
 import CoachingVoiceService from '../services/CoachingVoiceService';
 import analytics from '../services/AnalyticsService';
 import PreWorkoutCheckIn from '../components/PreWorkoutCheckIn';
+import RouteTracker from '../services/RouteTracker';
+import PostWorkoutSummary from '../components/PostWorkoutSummary';
+import { getRunnerProfile } from '../utils/storage';
 
 export default function MetronomeScreenSimple() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -16,7 +19,7 @@ export default function MetronomeScreenSimple() {
   const [volume, setVolume] = useState(0.8);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [workoutStartTime, setWorkoutStartTime] = useState(null);
-  const [mode, setMode] = useState('basic'); // basic, terrain, fartlek, interval, progressive
+  const [mode, setMode] = useState('none'); // none, fartlek, interval, progressive
   
   // Refs to avoid stale closures in callbacks
   const isPlayingRef = useRef(false);
@@ -28,7 +31,8 @@ export default function MetronomeScreenSimple() {
     onCoachingCue: null,
   });
   
-  // Terrain mode states
+  // Terrain tracking state (available in all modes)
+  const [terrainEnabled, setTerrainEnabled] = useState(false);
   const [isTrackingLocation, setIsTrackingLocation] = useState(false);
   const [terrainData, setTerrainData] = useState({
     terrain: 'flat',
@@ -46,6 +50,11 @@ export default function MetronomeScreenSimple() {
   // Pre-workout check-in state
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [feelingModifier, setFeelingModifier] = useState(null);
+  
+  // Post-workout summary state
+  const [showSummary, setShowSummary] = useState(false);
+  const [workoutSummary, setWorkoutSummary] = useState(null);
+  const [profileUnits, setProfileUnits] = useState('metric');
   
   // Interval mode states
   const [intervalConfig, setIntervalConfig] = useState({
@@ -136,6 +145,11 @@ export default function MetronomeScreenSimple() {
     // Initialize coaching voice
     CoachingVoiceService.initialize();
 
+    // Load profile units
+    getRunnerProfile().then(profile => {
+      if (profile?.units) setProfileUnits(profile.units);
+    });
+
     // Update workout status every second when active
     const statusInterval = setInterval(() => {
       const status = WorkoutEngine.getStatus();
@@ -209,8 +223,12 @@ export default function MetronomeScreenSimple() {
     const analysis = TerrainDetector.processLocation(location, locationHistory);
     setTerrainData(analysis);
     
-    // Adjust cadence if in terrain mode and metronome is playing
-    if (mode === 'terrain' && isPlaying) {
+    // Record point for route tracking
+    RouteTracker.addPoint(location);
+    RouteTracker.updateCadence(cadence);
+    
+    // Adjust cadence if terrain is enabled and metronome is playing
+    if (terrainEnabled && isPlaying) {
       const adjustedCadence = baseCadence + analysis.cadenceAdjustment;
       const newCadence = Math.max(140, Math.min(200, adjustedCadence));
       
@@ -265,8 +283,11 @@ export default function MetronomeScreenSimple() {
       setWorkoutStartTime(Date.now());
       if (modifier) setFeelingModifier(modifier);
       
-      if (mode === 'terrain') {
+      // Start terrain tracking if enabled
+      if (terrainEnabled) {
         setBaseCadence(adjustedCadence);
+        RouteTracker.start();
+        RouteTracker.updateCadence(adjustedCadence);
         await startLocationTracking();
       }
       
@@ -337,12 +358,17 @@ export default function MetronomeScreenSimple() {
       setWorkoutStatus({ active: false });
       setFeelingModifier(null);
       
-      if (mode === 'terrain') {
+      if (terrainEnabled) {
+        const summary = RouteTracker.stop();
         stopLocationTracking();
+        if (summary && summary.route.length > 1) {
+          setWorkoutSummary(summary);
+          setShowSummary(true);
+        }
       }
     } else {
-      // Show check-in for structured workouts, skip for basic/terrain
-      if (mode !== 'basic' && mode !== 'terrain') {
+      // Show check-in for structured workouts
+      if (mode !== 'none') {
         setShowCheckIn(true);
       } else {
         startWorkout(null);
@@ -401,7 +427,7 @@ export default function MetronomeScreenSimple() {
         <View style={styles.cadenceDisplay}>
           <Text style={styles.cadenceValue}>{cadence}</Text>
           <Text style={styles.cadenceLabel}>SPM</Text>
-          {mode === 'terrain' && (
+          {terrainEnabled && (
             <View style={styles.terrainInfo}>
               <Text style={styles.terrainText}>
                 {terrainData.terrain === 'uphill' ? '🔺' : terrainData.terrain === 'downhill' ? '🔻' : '➡️'} 
@@ -669,8 +695,6 @@ export default function MetronomeScreenSimple() {
           <Text style={styles.controlLabel}>TRAINING MODE</Text>
           <View style={styles.modeButtons}>
             {[
-              { key: 'basic', label: 'BASIC', desc: 'Simple metronome' },
-              { key: 'terrain', label: 'TERRAIN', desc: 'GPS adaptive' },
               { key: 'fartlek', label: 'FARTLEK', desc: 'Speed play' },
               { key: 'interval', label: 'INTERVAL', desc: 'Work/rest' },
               { key: 'progressive', label: 'PROGRESSIVE', desc: 'Build up' },
@@ -678,7 +702,7 @@ export default function MetronomeScreenSimple() {
               <TouchableOpacity
                 key={modeOption.key}
                 style={[styles.modeButton, mode === modeOption.key && styles.modeButtonActive]}
-                onPress={() => setMode(modeOption.key)}
+                onPress={() => setMode(mode === modeOption.key ? 'none' : modeOption.key)}
               >
                 <Text style={[styles.modeButtonText, mode === modeOption.key && styles.modeButtonTextActive]}>
                   {modeOption.label}
@@ -689,6 +713,19 @@ export default function MetronomeScreenSimple() {
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* GPS Terrain Toggle */}
+          <TouchableOpacity
+            style={[styles.terrainToggle, terrainEnabled && styles.terrainToggleActive]}
+            onPress={() => setTerrainEnabled(!terrainEnabled)}
+          >
+            <Text style={[styles.terrainToggleText, terrainEnabled && styles.terrainToggleTextActive]}>
+              {terrainEnabled ? '📍 GPS TERRAIN ON' : '📍 GPS TERRAIN OFF'}
+            </Text>
+            <Text style={[styles.terrainToggleDesc, terrainEnabled && styles.terrainToggleDescActive]}>
+              Auto-adjusts cadence for hills
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Presets */}
@@ -725,6 +762,14 @@ export default function MetronomeScreenSimple() {
         visible={showCheckIn}
         onSelect={handleCheckInSelect}
         onSkip={handleCheckInSkip}
+      />
+
+      {/* Post-workout summary modal */}
+      <PostWorkoutSummary
+        visible={showSummary}
+        onClose={() => setShowSummary(false)}
+        summary={workoutSummary}
+        units={profileUnits}
       />
     </ScrollView>
   );
@@ -1329,5 +1374,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
+  },
+  terrainToggle: {
+    backgroundColor: '#F8F8F8',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    marginTop: 12,
+  },
+  terrainToggleActive: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
+  },
+  terrainToggleText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  terrainToggleTextActive: {
+    color: '#FFFFFF',
+  },
+  terrainToggleDesc: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+  },
+  terrainToggleDescActive: {
+    color: '#CCCCCC',
   },
 });

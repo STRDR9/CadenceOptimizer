@@ -14,6 +14,7 @@ export default function TargetsScreen() {
   const [targetTime, setTargetTime] = useState('');
   const [result, setResult] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [units, setUnits] = useState('metric');
 
   const distances = ['5K', '10K', 'Half Marathon', 'Marathon'];
 
@@ -25,6 +26,11 @@ export default function TargetsScreen() {
     'Marathon': 42.195
   };
 
+  // Distance display names based on units
+  const distanceLabels = units === 'imperial' 
+    ? { '5K': '5K (3.1 mi)', '10K': '10K (6.2 mi)', 'Half Marathon': 'Half (13.1 mi)', 'Marathon': 'Marathon (26.2 mi)' }
+    : { '5K': '5K', '10K': '10K', 'Half Marathon': 'Half Marathon', 'Marathon': 'Marathon' };
+
   // Load runner profile on mount
   useEffect(() => {
     loadProfile();
@@ -34,6 +40,9 @@ export default function TargetsScreen() {
     try {
       const savedProfile = await getRunnerProfile();
       setProfile(savedProfile);
+      if (savedProfile?.units) {
+        setUnits(savedProfile.units);
+      }
     } catch (error) {
       // No profile found, using defaults
     }
@@ -116,7 +125,7 @@ export default function TargetsScreen() {
                 styles.distanceButtonText,
                 selectedDistance === distance && styles.distanceButtonTextActive
               ]}>
-                {distance}
+                {distanceLabels[distance] || distance}
               </Text>
             </TouchableOpacity>
           ))}
@@ -150,15 +159,18 @@ export default function TargetsScreen() {
 
           <View style={styles.resultCard}>
             <Text style={styles.resultLabel}>Target Pace</Text>
-            <View>
-              <Text style={styles.resultValue}>{result.targetPaceKm} /km</Text>
-              <Text style={styles.resultValueSecondary}>{result.targetPaceMi} /mi</Text>
-            </View>
+            <Text style={styles.resultValue}>
+              {units === 'metric' ? `${result.targetPaceKm} /km` : `${result.targetPaceMi} /mi`}
+            </Text>
           </View>
 
           <View style={styles.resultCard}>
             <Text style={styles.resultLabel}>Stride Length</Text>
-            <Text style={styles.resultValue}>{result.strideLength} m</Text>
+            <Text style={styles.resultValue}>
+              {units === 'metric' 
+                ? `${result.strideLength} m` 
+                : `${(parseFloat(result.strideLength) * 3.28084).toFixed(1)} ft`}
+            </Text>
           </View>
         </View>
       )}
@@ -302,11 +314,5 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '800',
     color: '#000000',
-  },
-  resultValueSecondary: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#000000',
-    marginTop: 4,
   },
 });
