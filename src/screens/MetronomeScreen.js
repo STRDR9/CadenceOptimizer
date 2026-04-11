@@ -443,74 +443,63 @@ export default function MetronomeScreenSimple() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.section}>
-        <Text style={styles.title}>STRDR METRONOME</Text>
-        
-        {/* Visual Beat Indicator */}
+        {/* Cadence Display - replaces old title */}
+        <View style={styles.cadenceHeader}>
+          <Text style={styles.cadenceValue}>{cadence}</Text>
+          <Text style={styles.cadenceLabel}>SPM</Text>
+          {terrainEnabled && (
+            <Text style={styles.terrainBadge}>
+              {terrainData.terrain === 'uphill' ? '🔺' : terrainData.terrain === 'downhill' ? '🔻' : '➡️'} 
+              {terrainData.cadenceAdjustment !== 0 ? `${terrainData.cadenceAdjustment > 0 ? '+' : ''}${terrainData.cadenceAdjustment}` : 'FLAT'}
+            </Text>
+          )}
+        </View>
+
+        {/* Visual Beat Indicator with +/- controls inside */}
         <View style={styles.visualSection}>
-          <Animated.View 
-            style={[
-              styles.pulseCircle,
-              {
-                transform: [{ scale: pulseAnim }],
-                backgroundColor: isPlaying ? 'rgba(0, 0, 0, 0.1)' : '#FFFFFF',
-                borderColor: isPlaying ? '#000000' : '#E5E5E5',
-              }
-            ]}
-          >
-            <Text style={styles.pulseText}>♪</Text>
-          </Animated.View>
+          <View style={styles.beatRow}>
+            <TouchableOpacity 
+              style={styles.adjustButton}
+              onPress={() => adjustCadence(-5)}
+            >
+              <Text style={styles.adjustButtonText}>-5</Text>
+            </TouchableOpacity>
+
+            <Animated.View 
+              style={[
+                styles.pulseCircle,
+                {
+                  transform: [{ scale: pulseAnim }],
+                  backgroundColor: isPlaying ? 'rgba(0, 0, 0, 0.1)' : '#FFFFFF',
+                  borderColor: isPlaying ? '#000000' : '#E5E5E5',
+                }
+              ]}
+            >
+              <Text style={styles.pulseText}>♪</Text>
+            </Animated.View>
+
+            <TouchableOpacity 
+              style={styles.adjustButton}
+              onPress={() => adjustCadence(5)}
+            >
+              <Text style={styles.adjustButtonText}>+5</Text>
+            </TouchableOpacity>
+          </View>
           
           <Text style={styles.beatCounter}>
             Beat: {currentBeat} | {Math.floor(currentBeat / 4) + 1} cycles
           </Text>
         </View>
 
-        {/* Cadence Display */}
-        <View style={styles.cadenceDisplay}>
-          <Text style={styles.cadenceValue}>{cadence}</Text>
-          <Text style={styles.cadenceLabel}>SPM</Text>
-          {terrainEnabled && (
-            <View style={styles.terrainInfo}>
-              <Text style={styles.terrainText}>
-                {terrainData.terrain === 'uphill' ? '🔺' : terrainData.terrain === 'downhill' ? '🔻' : '➡️'} 
-                {terrainData.terrain.toUpperCase()} ({terrainData.grade.toFixed(1)}%)
-              </Text>
-              <Text style={styles.terrainAdjustment}>
-                {terrainData.cadenceAdjustment > 0 ? '+' : ''}{terrainData.cadenceAdjustment} SPM
-              </Text>
-              <View style={[styles.confidenceDot, { backgroundColor: 
-                terrainData.confidence === 'high' ? '#00FF00' : 
-                terrainData.confidence === 'medium' ? '#FFA500' : '#FF0000' 
-              }]} />
-            </View>
-          )}
-        </View>
-
-        {/* Controls */}
-        <View style={styles.controls}>
-          <TouchableOpacity 
-            style={styles.adjustButton}
-            onPress={() => adjustCadence(-5)}
-          >
-            <Text style={styles.adjustButtonText}>-5</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.playButton, isPlaying && styles.playButtonActive]}
-            onPress={toggleMetronome}
-          >
-            <Text style={styles.playButtonText}>
-              {isPlaying ? 'STOP' : 'START'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.adjustButton}
-            onPress={() => adjustCadence(5)}
-          >
-            <Text style={styles.adjustButtonText}>+5</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Start/Stop Button - right under the visual section */}
+        <TouchableOpacity 
+          style={[styles.playButton, isPlaying && styles.playButtonActive]}
+          onPress={toggleMetronome}
+        >
+          <Text style={styles.playButtonText}>
+            {isPlaying ? 'STOP' : 'START'}
+          </Text>
+        </TouchableOpacity>
 
         {/* Web Compatibility Notice */}
         {typeof window !== 'undefined' && (
@@ -524,32 +513,18 @@ export default function MetronomeScreenSimple() {
           </View>
         )}
 
-        {/* Audio Controls */}
+        {/* Voice Coaching Controls */}
         <View style={styles.audioControls}>
-          <Text style={styles.controlLabel}>AUDIO CONTROLS</Text>
+          <Text style={styles.controlLabel}>VOICE COACHING</Text>
           
           <TouchableOpacity 
-            style={[styles.audioToggle, audioEnabled && styles.audioToggleActive]}
-            onPress={() => setAudioEnabled(!audioEnabled)}
+            style={[styles.audioToggle, coachingEnabled && styles.audioToggleActive]}
+            onPress={() => setCoachingEnabled(!coachingEnabled)}
           >
-            <Text style={[styles.audioToggleText, audioEnabled && styles.audioToggleTextActive]}>
-              {audioEnabled ? 'AUDIO ON' : 'AUDIO OFF'}
+            <Text style={[styles.audioToggleText, coachingEnabled && styles.audioToggleTextActive]}>
+              {coachingEnabled ? 'ON' : 'OFF'}
             </Text>
           </TouchableOpacity>
-
-          <View style={styles.volumeControl}>
-            <Text style={styles.volumeLabel}>Volume: {Math.round(volume * 100)}%</Text>
-            <Slider
-              style={styles.volumeSlider}
-              minimumValue={0}
-              maximumValue={1}
-              value={volume}
-              onValueChange={updateVolume}
-              minimumTrackTintColor="#000000"
-              maximumTrackTintColor="#E5E5E5"
-              thumbStyle={{ backgroundColor: '#000000' }}
-            />
-          </View>
         </View>
 
         {/* Spotify Music */}
@@ -595,15 +570,6 @@ export default function MetronomeScreenSimple() {
                 ))}
               </View>
             </View>
-
-            <TouchableOpacity 
-              style={[styles.coachingToggle, coachingEnabled && styles.coachingToggleActive]}
-              onPress={() => setCoachingEnabled(!coachingEnabled)}
-            >
-              <Text style={[styles.coachingToggleText, coachingEnabled && styles.coachingToggleTextActive]}>
-                {coachingEnabled ? '🎙️ VOICE COACHING ON' : '🔇 VOICE COACHING OFF'}
-              </Text>
-            </TouchableOpacity>
           </View>
         )}
 
@@ -705,15 +671,6 @@ export default function MetronomeScreenSimple() {
                 </View>
               </View>
             </View>
-
-            <TouchableOpacity 
-              style={[styles.coachingToggle, coachingEnabled && styles.coachingToggleActive]}
-              onPress={() => setCoachingEnabled(!coachingEnabled)}
-            >
-              <Text style={[styles.coachingToggleText, coachingEnabled && styles.coachingToggleTextActive]}>
-                {coachingEnabled ? '🎙️ VOICE COACHING ON' : '🔇 VOICE COACHING OFF'}
-              </Text>
-            </TouchableOpacity>
           </View>
         )}
 
@@ -784,24 +741,6 @@ export default function MetronomeScreenSimple() {
           </TouchableOpacity>
         </View>
 
-        {/* Presets */}
-        <View style={styles.presets}>
-          <Text style={styles.controlLabel}>QUICK PRESETS</Text>
-          <View style={styles.presetButtons}>
-            {[160, 170, 180, 190].map((preset) => (
-              <TouchableOpacity
-                key={preset}
-                style={[styles.presetButton, cadence === preset && styles.presetButtonActive]}
-                onPress={() => setPresetCadence(preset)}
-              >
-                <Text style={[styles.presetButtonText, cadence === preset && styles.presetButtonTextActive]}>
-                  {preset}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
         {/* Feeling indicator during workout */}
         {feelingModifier && isPlaying && (
           <View style={styles.feelingIndicator}>
@@ -845,22 +784,36 @@ const styles = StyleSheet.create({
   },
   section: {
     padding: 20,
+    paddingTop: 8,
   },
-  title: {
-    fontSize: 32,
+  cadenceHeader: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cadenceValue: {
+    fontSize: 64,
     fontWeight: '900',
-    marginBottom: 24,
-    textAlign: 'center',
     color: '#000000',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    lineHeight: 68,
+  },
+  cadenceLabel: {
+    fontSize: 16,
+    color: '#666666',
+    fontWeight: '700',
+    letterSpacing: 2,
+  },
+  terrainBadge: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#000',
+    marginTop: 4,
   },
   visualSection: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 16,
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    padding: 24,
+    padding: 20,
     borderWidth: 1,
     borderColor: '#E5E5E5',
     shadowColor: '#000000',
@@ -869,116 +822,59 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
+  beatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
   pulseCircle: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
     borderWidth: 3,
     borderColor: '#000000',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 10,
+    marginHorizontal: 24,
   },
   pulseText: {
-    fontSize: 56,
+    fontSize: 48,
     color: '#000000',
     fontWeight: '900',
   },
   beatCounter: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#666666',
     textAlign: 'center',
     fontWeight: '600',
   },
-  cadenceDisplay: {
-    alignItems: 'center',
-    marginBottom: 32,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  cadenceValue: {
-    fontSize: 72,
-    fontWeight: '900',
-    color: '#000000',
-  },
-  cadenceLabel: {
-    fontSize: 20,
-    color: '#666666',
-    marginTop: 8,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  terrainInfo: {
-    marginTop: 16,
-    alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#F8F8F8',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-  },
-  terrainText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 4,
-  },
-  terrainAdjustment: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#666666',
-    marginBottom: 8,
-  },
-  confidenceDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  controls: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 32,
-    paddingHorizontal: 10,
-  },
   adjustButton: {
     backgroundColor: '#FFFFFF',
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E5E5E5',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowRadius: 4,
+    elevation: 4,
   },
   adjustButtonText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: '#000000',
   },
   playButton: {
     backgroundColor: '#000000',
-    paddingHorizontal: 40,
-    paddingVertical: 20,
-    borderRadius: 35,
+    paddingVertical: 18,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginBottom: 24,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
@@ -993,7 +889,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 20,
     fontWeight: '900',
-    letterSpacing: 1,
+    letterSpacing: 2,
     textTransform: 'uppercase',
   },
   audioControls: {
