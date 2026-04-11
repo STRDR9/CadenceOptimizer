@@ -10,6 +10,7 @@ import analytics from '../services/AnalyticsService';
 import PreWorkoutCheckIn from '../components/PreWorkoutCheckIn';
 import RouteTracker from '../services/RouteTracker';
 import PostWorkoutSummary from '../components/PostWorkoutSummary';
+import SpotifyPlaylistBuilder from '../components/SpotifyPlaylistBuilder';
 import { getRunnerProfile } from '../utils/storage';
 
 export default function MetronomeScreenSimple() {
@@ -55,6 +56,7 @@ export default function MetronomeScreenSimple() {
   const [showSummary, setShowSummary] = useState(false);
   const [workoutSummary, setWorkoutSummary] = useState(null);
   const [profileUnits, setProfileUnits] = useState('metric');
+  const [showMusic, setShowMusic] = useState(false);
   
   // Interval mode states
   const [intervalConfig, setIntervalConfig] = useState({
@@ -550,6 +552,20 @@ export default function MetronomeScreenSimple() {
           </View>
         </View>
 
+        {/* Spotify Music */}
+        <TouchableOpacity
+          style={styles.musicButton}
+          onPress={() => setShowMusic(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.musicButtonIcon}>🎵</Text>
+          <View style={styles.musicButtonContent}>
+            <Text style={styles.musicButtonText}>FIND MUSIC AT {cadence} BPM</Text>
+            <Text style={styles.musicButtonDesc}>Build a Spotify playlist for your run</Text>
+          </View>
+          <Text style={styles.musicButtonArrow}>→</Text>
+        </TouchableOpacity>
+
         {/* Mode-Specific Configuration */}
         {mode === 'fartlek' && (
           <View style={styles.configSection}>
@@ -810,6 +826,13 @@ export default function MetronomeScreenSimple() {
         onClose={() => setShowSummary(false)}
         summary={workoutSummary}
         units={profileUnits}
+      />
+
+      {/* Spotify playlist builder */}
+      <SpotifyPlaylistBuilder
+        visible={showMusic}
+        onClose={() => setShowMusic(false)}
+        targetCadence={cadence}
       />
     </ScrollView>
   );
@@ -1414,6 +1437,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
+  },
+  musicButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAFAFA',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  musicButtonIcon: {
+    fontSize: 28,
+    marginRight: 16,
+  },
+  musicButtonContent: {
+    flex: 1,
+  },
+  musicButtonText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#000',
+    letterSpacing: 0.5,
+  },
+  musicButtonDesc: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 2,
+  },
+  musicButtonArrow: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#000',
   },
   terrainToggle: {
     backgroundColor: '#F8F8F8',

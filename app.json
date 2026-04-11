@@ -65,7 +65,8 @@
       "expo-location",
       "expo-av",
       "expo-document-picker",
-      "expo-file-system"
+      "expo-file-system",
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {
