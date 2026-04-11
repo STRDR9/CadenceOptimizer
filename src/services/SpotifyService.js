@@ -13,6 +13,12 @@ const discovery = {
   tokenEndpoint: SPOTIFY_CONFIG.endpoints.token,
 };
 
+function encodeFormData(obj) {
+  return Object.entries(obj)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&');
+}
+
 class SpotifyService {
   constructor() {
     this.accessToken = null;
@@ -77,13 +83,13 @@ class SpotifyService {
     const response = await fetch(SPOTIFY_CONFIG.endpoints.token, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
+      body: encodeFormData({
         grant_type: 'authorization_code',
         code,
         redirect_uri: SPOTIFY_CONFIG.redirectUri,
         client_id: SPOTIFY_CONFIG.clientId,
         code_verifier: codeVerifier,
-      }).toString(),
+      }),
     });
 
     const data = await response.json();
@@ -100,11 +106,11 @@ class SpotifyService {
       const response = await fetch(SPOTIFY_CONFIG.endpoints.token, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
+        body: encodeFormData({
           grant_type: 'refresh_token',
           refresh_token: this.refreshToken,
           client_id: SPOTIFY_CONFIG.clientId,
-        }).toString(),
+        }),
       });
 
       const data = await response.json();

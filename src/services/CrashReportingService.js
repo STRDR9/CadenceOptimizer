@@ -15,27 +15,19 @@ class CrashReportingService {
   initialize() {
     if (this.isInitialized) return;
 
-    // Capture unhandled JS errors
-    const originalHandler = ErrorUtils.getGlobalHandler();
-    ErrorUtils.setGlobalHandler((error, isFatal) => {
-      this.captureError(error, { isFatal, source: 'global_handler' });
-      if (originalHandler) {
-        originalHandler(error, isFatal);
+    try {
+      // Capture unhandled JS errors
+      if (typeof ErrorUtils !== 'undefined') {
+        const originalHandler = ErrorUtils.getGlobalHandler();
+        ErrorUtils.setGlobalHandler((error, isFatal) => {
+          this.captureError(error, { isFatal, source: 'global_handler' });
+          if (originalHandler) {
+            originalHandler(error, isFatal);
+          }
+        });
       }
-    });
-
-    // Capture unhandled promise rejections
-    const originalRejectionTracking = global.HermesInternal?.hasPromise?.()
-      ? null
-      : require('promise/setimmediate/rejection-tracking');
-    
-    if (originalRejectionTracking) {
-      originalRejectionTracking.enable({
-        allRejections: true,
-        onUnhandled: (id, error) => {
-          this.captureError(error, { source: 'unhandled_promise', promiseId: id });
-        },
-      });
+    } catch (e) {
+      // ErrorUtils not available
     }
 
     this.isInitialized = true;

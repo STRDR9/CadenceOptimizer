@@ -1,11 +1,16 @@
 // Spotify Configuration
 
-import { makeRedirectUri } from 'expo-auth-session';
+let redirectUri = 'com.strdr.app://spotify-auth';
 
-const redirectUri = makeRedirectUri({
-  scheme: 'com.strdr.app',
-  path: 'spotify-auth',
-});
+try {
+  const { makeRedirectUri } = require('expo-auth-session');
+  redirectUri = makeRedirectUri({
+    scheme: 'com.strdr.app',
+    path: 'spotify-auth',
+  });
+} catch (e) {
+  // Fallback to manual URI
+}
 
 export const SPOTIFY_CONFIG = {
   enabled: true,
