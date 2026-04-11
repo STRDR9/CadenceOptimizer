@@ -8,13 +8,25 @@ class RouteTracker {
     this.points = []; // { latitude, longitude, altitude, timestamp, cadence }
     this.startTime = null;
     this.currentCadence = 0;
+    this.onSplitComplete = null; // callback when a split is completed
+    this.splitUnit = 1000; // meters (1000 = km, 1609.34 = mile)
+    this.lastSplitIndex = 0;
+    this.lastSplitDistance = 0;
+    this.completedSplits = 0;
+    this.cumulativeDistance = 0;
   }
 
-  start() {
+  start(splitUnit = 1000, onSplitComplete = null) {
     this.isRecording = true;
     this.points = [];
     this.startTime = Date.now();
     this.currentCadence = 0;
+    this.onSplitComplete = onSplitComplete;
+    this.splitUnit = splitUnit;
+    this.lastSplitIndex = 0;
+    this.lastSplitDistance = 0;
+    this.completedSplits = 0;
+    this.cumulativeDistance = 0;
   }
 
   stop() {
@@ -28,13 +40,58 @@ class RouteTracker {
 
   addPoint(location) {
     if (!this.isRecording) return;
-    this.points.push({
+    
+    const point = {
       latitude: location.latitude,
       longitude: location.longitude,
       altitude: location.altitude || 0,
       timestamp: location.timestamp || Date.now(),
       cadence: this.currentCadence,
-    });
+    };
+
+    // Calculate distance from last point
+    if (this.points.length > 0) {
+      const lastPoint = this.points[this.points.length - 1];
+      const segDist = this._distanceBetween(lastPoint, point);
+      this.cumulativeDistance += segDist;
+
+      // Check if we crossed a split boundary
+      const distanceSinceLastSplit = this.cumulativeDistance - this.lastSplitDistance;
+      if (distanceSinceLastSplit >= this.splitUnit && this.onSplitComplete) {
+        this.completedSplits++;
+        
+        // Calculate split stats
+        const splitPoints = this.points.slice(this.lastSplitIndex);
+        const cadences = splitPoints.filter(p => p.cadence > 0).map(p => p.cadence);
+        const avgCadence = cadences.length > 0
+          ? Math.round(cadences.reduce((a, b) => a + b, 0) / cadences.length)
+          : 0;
+        const splitTime = (point.timestamp - this.points[this.lastSplitIndex].timestamp) / 1000;
+        const paceSeconds = distanceSinceLastSplit > 0
+          ? (splitTime / distanceSinceLastSplit) * this.splitUnit
+          : 0;
+
+        // Overall average pace
+        const totalTime = (point.timestamp - this.points[0].timestamp) / 1000;
+        const overallPace = this.cumulativeDistance > 0
+          ? (totalTime / this.cumulativeDistance) * this.splitUnit
+          : 0;
+
+        this.onSplitComplete({
+          splitNumber: this.completedSplits,
+          splitTime,
+          splitPace: paceSeconds,
+          splitCadence: avgCadence,
+          overallPace,
+          totalDistance: this.cumulativeDistance,
+        });
+
+        this.lastSplitIndex = this.points.length;
+        this.lastSplitDistance = this.cumulativeDistance;
+      }
+    }
+
+    this.points.push(point);
   }
 
   // Haversine distance between two GPS points in meters

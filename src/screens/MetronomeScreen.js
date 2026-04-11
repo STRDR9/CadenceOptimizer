@@ -88,6 +88,7 @@ export default function MetronomeScreenSimple() {
   
   const handleCadenceChange = (newCadence, reason) => {
     setCadence(newCadence);
+    RouteTracker.updateCadence(newCadence);
     if (isPlayingRef.current) {
       MetronomeService.updateBpm(newCadence, stableHandleBeat);
     }
@@ -266,6 +267,44 @@ export default function MetronomeScreenSimple() {
     });
   };
 
+  // Handle split completion — voice coaching check-in
+  const handleSplitComplete = (split) => {
+    if (!coachingEnabled) return;
+
+    const unitLabel = profileUnits === 'imperial' ? 'mile' : 'kilometer';
+    const paceLabel = profileUnits === 'imperial' ? 'per mile' : 'per K';
+
+    const formatPace = (seconds) => {
+      const m = Math.floor(seconds / 60);
+      const s = Math.round(seconds % 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const splitPace = formatPace(split.splitPace);
+    const overallPace = formatPace(split.overallPace);
+
+    // Build the message
+    let message = `${unitLabel} ${split.splitNumber} complete. `;
+    message += `${splitPace} ${paceLabel}. `;
+    message += `Cadence ${split.splitCadence}. `;
+
+    // Compare to overall pace and give adjustment cue
+    const paceDiff = split.splitPace - split.overallPace;
+    if (paceDiff > 10) {
+      message += `You're slowing down. Pick it up a bit.`;
+    } else if (paceDiff < -10) {
+      message += `Running hot. Make sure you can hold this.`;
+    } else {
+      message += `Right on pace. Keep it steady.`;
+    }
+
+    CoachingVoiceService.speakCoachingCue({
+      message,
+      type: 'instruction',
+      priority: 'high',
+    });
+  };
+
   // Actually start the metronome and workout with optional feeling modifier
   const startWorkout = async (modifier = null) => {
     try {
@@ -286,7 +325,8 @@ export default function MetronomeScreenSimple() {
       // Start terrain tracking if enabled
       if (terrainEnabled) {
         setBaseCadence(adjustedCadence);
-        RouteTracker.start();
+        const splitMeters = profileUnits === 'imperial' ? 1609.34 : 1000;
+        RouteTracker.start(splitMeters, handleSplitComplete);
         RouteTracker.updateCadence(adjustedCadence);
         await startLocationTracking();
       }
