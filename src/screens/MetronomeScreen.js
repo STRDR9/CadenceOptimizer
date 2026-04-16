@@ -51,6 +51,7 @@ export default function MetronomeScreenSimple() {
   // Pre-workout check-in state
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [feelingModifier, setFeelingModifier] = useState(null);
+  const [workoutActive, setWorkoutActive] = useState(false); // tracks if a workout session exists (even when paused)
   
   // Post-workout summary state
   const [showSummary, setShowSummary] = useState(false);
@@ -323,6 +324,7 @@ export default function MetronomeScreenSimple() {
       
       setWorkoutStartTime(Date.now());
       if (modifier) setFeelingModifier(modifier);
+      setWorkoutActive(true);
       
       // Start terrain tracking if enabled
       if (terrainEnabled) {
@@ -387,35 +389,50 @@ export default function MetronomeScreenSimple() {
 
   const toggleMetronome = async () => {
     if (isPlaying) {
-      analytics.trackFeatureUsage('metronome', 'workout_stopped', {
-        mode: mode,
-        duration: Date.now() - workoutStartTime,
-        cadence: cadence
-      });
-      
+      // PAUSE — stop audio but keep workout alive
       await MetronomeService.stop();
-      WorkoutEngine.stopWorkout();
+      WorkoutEngine.pauseWorkout();
       setIsPlaying(false);
-      setCurrentBeat(0);
-      setWorkoutStatus({ active: false });
-      setFeelingModifier(null);
-      
-      if (terrainEnabled) {
-        const summary = RouteTracker.stop();
-        stopLocationTracking();
-        if (summary && summary.route.length > 1) {
-          setWorkoutSummary(summary);
-          setShowSummary(true);
-        }
-      }
+      // Don't reset workoutStatus — keep the progress visible
+    } else if (workoutActive) {
+      // RESUME — pick up where we left off
+      setIsPlaying(true);
+      await MetronomeService.start(cadence, stableHandleBeat, volume, audioEnabled);
+      WorkoutEngine.resumeWorkout();
     } else {
-      // Show check-in for structured workouts
+      // START — new workout
       if (mode !== 'none') {
         setShowCheckIn(true);
       } else {
         startWorkout(null);
       }
     }
+  };
+
+  const endWorkout = async () => {
+    analytics.trackFeatureUsage('metronome', 'workout_stopped', {
+      mode: mode,
+      duration: Date.now() - workoutStartTime,
+      cadence: cadence
+    });
+
+    await MetronomeService.stop();
+    WorkoutEngine.stopWorkout();
+    setIsPlaying(false);
+    setCurrentBeat(0);
+    setWorkoutActive(false);
+    setFeelingModifier(null);
+
+    if (terrainEnabled) {
+      const summary = RouteTracker.stop();
+      stopLocationTracking();
+      if (summary && summary.route.length > 1) {
+        setWorkoutSummary(summary);
+        setShowSummary(true);
+      }
+    }
+
+    setWorkoutStatus({ active: false });
   };
 
   const adjustCadence = (change) => {
@@ -491,15 +508,25 @@ export default function MetronomeScreenSimple() {
           </Text>
         </View>
 
-        {/* Start/Stop Button - right under the visual section */}
+        {/* Start/Pause Button */}
         <TouchableOpacity 
           style={[styles.playButton, isPlaying && styles.playButtonActive]}
           onPress={toggleMetronome}
         >
           <Text style={styles.playButtonText}>
-            {isPlaying ? 'STOP' : 'START'}
+            {isPlaying ? 'PAUSE' : 'START'}
           </Text>
         </TouchableOpacity>
+
+        {/* End Workout Button — visible once a workout has started */}
+        {workoutActive && (
+          <TouchableOpacity 
+            style={styles.endWorkoutButton}
+            onPress={endWorkout}
+          >
+            <Text style={styles.endWorkoutButtonText}>END WORKOUT</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Web Compatibility Notice */}
         {typeof window !== 'undefined' && (
@@ -891,6 +918,21 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 2,
     textTransform: 'uppercase',
+  },
+  endWorkoutButton: {
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: '#FF3B30',
+  },
+  endWorkoutButtonText: {
+    color: '#FF3B30',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 1,
   },
   audioControls: {
     backgroundColor: '#FFFFFF',

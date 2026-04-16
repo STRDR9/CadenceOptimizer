@@ -23,6 +23,10 @@ export class WorkoutEngine {
       cadenceChanges: 0,
       averageCompliance: 0,
     };
+    this.isPaused = false;
+    this.phaseTimeRemaining = 0;
+    this.phaseTimer = null;
+    this.cueTimers = [];
   }
 
   /**
@@ -581,8 +585,9 @@ export class WorkoutEngine {
     this.scheduleCoachingCues(phase);
 
     // Schedule next phase
-    setTimeout(() => {
-      if (this.isActive) {
+    this.phaseTimeRemaining = phase.duration * 1000;
+    this.phaseTimer = setTimeout(() => {
+      if (this.isActive && !this.isPaused) {
         this.stats.phasesCompleted++;
         this.stats.cadenceChanges++;
         this.startPhase(phaseIndex + 1);
@@ -599,11 +604,12 @@ export class WorkoutEngine {
       return;
     }
 
+    this.cueTimers = [];
     phase.coachingCues.forEach((cue, index) => {
       const delay = cue.timing * phase.duration * 1000;
       
-      setTimeout(() => {
-        if (this.isActive && this.callbacks.onCoachingCue) {
+      const timer = setTimeout(() => {
+        if (this.isActive && !this.isPaused && this.callbacks.onCoachingCue) {
           try {
             this.callbacks.onCoachingCue(cue.message, cue.type);
           } catch (error) {
@@ -611,6 +617,7 @@ export class WorkoutEngine {
           }
         }
       }, delay);
+      this.cueTimers.push(timer);
     });
   }
 
@@ -663,12 +670,52 @@ export class WorkoutEngine {
   }
 
   /**
+   * Pause the current workout
+   */
+  pauseWorkout() {
+    if (!this.isActive || this.isPaused) return;
+    this.isPaused = true;
+
+    // Calculate remaining time in current phase
+    const phaseElapsed = Date.now() - this.phaseStartTime;
+    const currentPhase = this.currentWorkout.phases[this.currentPhase];
+    this.phaseTimeRemaining = Math.max(0, (currentPhase.duration * 1000) - phaseElapsed);
+
+    // Clear all timers
+    if (this.phaseTimer) clearTimeout(this.phaseTimer);
+    this.cueTimers.forEach(t => clearTimeout(t));
+    this.cueTimers = [];
+  }
+
+  /**
+   * Resume the current workout
+   */
+  resumeWorkout() {
+    if (!this.isActive || !this.isPaused) return;
+    this.isPaused = false;
+    this.phaseStartTime = Date.now() - ((this.currentWorkout.phases[this.currentPhase].duration * 1000) - this.phaseTimeRemaining);
+
+    // Reschedule phase transition with remaining time
+    this.phaseTimer = setTimeout(() => {
+      if (this.isActive && !this.isPaused) {
+        this.stats.phasesCompleted++;
+        this.stats.cadenceChanges++;
+        this.startPhase(this.currentPhase + 1);
+      }
+    }, this.phaseTimeRemaining);
+  }
+
+  /**
    * Stop the current workout
    */
   stopWorkout() {
     if (!this.isActive) return;
 
     this.isActive = false;
+    this.isPaused = false;
+    if (this.phaseTimer) clearTimeout(this.phaseTimer);
+    this.cueTimers.forEach(t => clearTimeout(t));
+    this.cueTimers = [];
     this.stats.totalTime = Date.now() - this.workoutStartTime;
     
     if (this.callbacks.onWorkoutComplete) {
@@ -697,17 +744,20 @@ export class WorkoutEngine {
    */
   getStatus() {
     if (!this.isActive || !this.currentWorkout) {
-      return { active: false };
+      return { active: false, paused: false };
     }
 
     const currentPhase = this.currentWorkout.phases[this.currentPhase];
-    const phaseElapsed = (Date.now() - this.phaseStartTime) / 1000;
+    const phaseElapsed = this.isPaused
+      ? (currentPhase.duration * 1000 - this.phaseTimeRemaining) / 1000
+      : (Date.now() - this.phaseStartTime) / 1000;
     const phaseProgress = Math.min(1, phaseElapsed / currentPhase.duration);
     const workoutElapsed = (Date.now() - this.workoutStartTime) / 1000;
     const workoutProgress = Math.min(1, workoutElapsed / this.currentWorkout.duration);
 
     return {
       active: true,
+      paused: this.isPaused,
       workout: this.currentWorkout,
       currentPhase: this.currentPhase,
       phase: currentPhase,
