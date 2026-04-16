@@ -5,6 +5,7 @@ const KEYS = {
   RUNNER_PROFILE: '@runner_profile',
   ANALYSIS_HISTORY: '@analysis_history',
   PREFERENCES: '@preferences',
+  WORKOUT_HISTORY: '@workout_history',
 };
 
 /**
@@ -101,5 +102,39 @@ export const getPreferences = async () => {
       volume: 0.8,
       units: 'metric',
     };
+  }
+};
+
+
+/**
+ * Save a completed workout to history
+ * @param {Object} workout - Workout summary data
+ */
+export const saveWorkoutToHistory = async (workout) => {
+  try {
+    const history = await getWorkoutHistory();
+    const updated = [
+      { ...workout, id: Date.now().toString(36), savedAt: new Date().toISOString() },
+      ...history.slice(0, 99), // Keep last 100
+    ];
+    await AsyncStorage.setItem(KEYS.WORKOUT_HISTORY, JSON.stringify(updated));
+    return true;
+  } catch (error) {
+    console.error('Error saving workout:', error);
+    return false;
+  }
+};
+
+/**
+ * Get workout history
+ * @returns {Array} Array of past workouts
+ */
+export const getWorkoutHistory = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.WORKOUT_HISTORY);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error('Error getting workout history:', error);
+    return [];
   }
 };

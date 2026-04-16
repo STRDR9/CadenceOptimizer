@@ -12,6 +12,7 @@ import RouteTracker from '../services/RouteTracker';
 import PostWorkoutSummary from '../components/PostWorkoutSummary';
 import SpotifyPlaylistBuilder from '../components/SpotifyPlaylistBuilder';
 import { getRunnerProfile } from '../utils/storage';
+import { saveWorkoutToHistory } from '../utils/storage';
 
 export default function MetronomeScreenSimple() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -410,9 +411,11 @@ export default function MetronomeScreenSimple() {
   };
 
   const endWorkout = async () => {
+    const duration = Date.now() - workoutStartTime;
+    
     analytics.trackFeatureUsage('metronome', 'workout_stopped', {
       mode: mode,
-      duration: Date.now() - workoutStartTime,
+      duration: duration,
       cadence: cadence
     });
 
@@ -423,15 +426,31 @@ export default function MetronomeScreenSimple() {
     setWorkoutActive(false);
     setFeelingModifier(null);
 
+    let routeSummary = null;
     if (terrainEnabled) {
-      const summary = RouteTracker.stop();
+      routeSummary = RouteTracker.stop();
       stopLocationTracking();
-      if (summary && summary.route.length > 1) {
-        setWorkoutSummary(summary);
-        setShowSummary(true);
-      }
     }
 
+    // Build workout summary — always show it
+    const summary = {
+      date: new Date().toISOString(),
+      mode: mode === 'none' ? 'free run' : mode,
+      duration: duration / 1000,
+      avgCadence: routeSummary?.avgCadence || cadence,
+      totalDistance: routeSummary?.totalDistance || 0,
+      route: routeSummary?.route || [],
+      splitsKm: routeSummary?.splitsKm || [],
+      splitsMi: routeSummary?.splitsMi || [],
+      feeling: feelingModifier?.label || null,
+      terrainEnabled: terrainEnabled,
+    };
+
+    // Save to history
+    await saveWorkoutToHistory(summary);
+
+    setWorkoutSummary(summary);
+    setShowSummary(true);
     setWorkoutStatus({ active: false });
   };
 

@@ -9,6 +9,7 @@ import AnalysisScreen from './src/screens/AnalysisScreen';
 import MetronomeScreen from './src/screens/MetronomeScreen';
 import TargetsScreen from './src/screens/TargetsScreen';
 import RunnerProfileSetup from './src/screens/RunnerProfileSetup';
+import WorkoutHistoryScreen from './src/screens/WorkoutHistoryScreen';
 import analytics from './src/services/AnalyticsService';
 import CrashReportingService from './src/services/CrashReportingService';
 
@@ -104,11 +105,11 @@ export default function App() {
           }}
         />
         <Tab.Screen 
-          name="Analysis" 
-          component={AnalysisScreen}
+          name="History" 
+          component={WorkoutHistoryScreen}
           options={{ 
-            title: 'ANALYSIS',
-            tabBarLabel: 'ANALYSIS'
+            title: 'HISTORY',
+            tabBarLabel: 'HISTORY'
           }}
         />
         <Tab.Screen 
@@ -116,7 +117,7 @@ export default function App() {
           component={MetronomeScreen}
           options={{ 
             title: 'METRONOME',
-            tabBarLabel: 'METRONOME'
+            tabBarLabel: 'RUN'
           }}
         />
         <Tab.Screen 

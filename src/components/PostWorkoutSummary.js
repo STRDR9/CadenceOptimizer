@@ -33,7 +33,7 @@ function formatDuration(seconds) {
 export default function PostWorkoutSummary({ visible, onClose, summary, units = 'metric' }) {
   const [showSplits, setShowSplits] = useState(false);
 
-  if (!summary || !summary.route || summary.route.length === 0) {
+  if (!summary) {
     return (
       <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.container}>
@@ -44,10 +44,7 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
             </TouchableOpacity>
           </View>
           <View style={styles.noDataContainer}>
-            <Text style={styles.noDataText}>No GPS data recorded for this workout.</Text>
-            <Text style={styles.noDataSubtext}>
-              Enable GPS Terrain to track your route next time.
-            </Text>
+            <Text style={styles.noDataText}>No workout data available.</Text>
           </View>
           <TouchableOpacity style={styles.doneButton} onPress={onClose}>
             <Text style={styles.doneButtonText}>DONE</Text>
@@ -57,28 +54,35 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
     );
   }
 
+  const hasRoute = summary.route && summary.route.length > 1;
+
   const isMetric = units === 'metric';
-  const distanceValue = isMetric
-    ? (summary.totalDistance / 1000).toFixed(2)
-    : (summary.totalDistance / 1609.34).toFixed(2);
+  const distanceValue = summary.totalDistance > 0
+    ? (isMetric ? (summary.totalDistance / 1000).toFixed(2) : (summary.totalDistance / 1609.34).toFixed(2))
+    : null;
   const distanceUnit = isMetric ? 'km' : 'mi';
   const paceUnit = isMetric ? '/km' : '/mi';
-  const splits = isMetric ? summary.splitsKm : summary.splitsMi;
+  const splits = isMetric ? (summary.splitsKm || []) : (summary.splitsMi || []);
   const avgPaceSeconds = summary.totalDistance > 0
     ? (summary.duration / summary.totalDistance) * (isMetric ? 1000 : 1609.34)
     : 0;
 
   // Calculate map region from route
-  const lats = summary.route.map(p => p.latitude);
-  const lons = summary.route.map(p => p.longitude);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLon = Math.min(...lons);
-  const maxLon = Math.max(...lons);
-  const midLat = (minLat + maxLat) / 2;
-  const midLon = (minLon + maxLon) / 2;
-  const latDelta = Math.max((maxLat - minLat) * 1.3, 0.005);
-  const lonDelta = Math.max((maxLon - minLon) * 1.3, 0.005);
+  let mapRegion = null;
+  if (hasRoute) {
+    const lats = summary.route.map(p => p.latitude);
+    const lons = summary.route.map(p => p.longitude);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLon = Math.min(...lons);
+    const maxLon = Math.max(...lons);
+    mapRegion = {
+      latitude: (minLat + maxLat) / 2,
+      longitude: (minLon + maxLon) / 2,
+      latitudeDelta: Math.max((maxLat - minLat) * 1.3, 0.005),
+      longitudeDelta: Math.max((maxLon - minLon) * 1.3, 0.005),
+    };
+  }
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
@@ -91,59 +95,56 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Route Map */}
-          <View style={styles.mapContainer}>
-            <MapView
-              style={styles.map}
-              initialRegion={{
-                latitude: midLat,
-                longitude: midLon,
-                latitudeDelta: latDelta,
-                longitudeDelta: lonDelta,
-              }}
-              scrollEnabled={false}
-              zoomEnabled={false}
-              rotateEnabled={false}
-              pitchEnabled={false}
-            >
-              <Polyline
-                coordinates={summary.route}
-                strokeColor="#000000"
-                strokeWidth={4}
-              />
-              {summary.route.length > 0 && (
-                <>
-                  <Marker
-                    coordinate={summary.route[0]}
-                    title="Start"
-                    pinColor="green"
-                  />
-                  <Marker
-                    coordinate={summary.route[summary.route.length - 1]}
-                    title="Finish"
-                    pinColor="red"
-                  />
-                </>
-              )}
-            </MapView>
-          </View>
+          {/* Route Map — only if GPS data exists */}
+          {hasRoute && mapRegion && (
+            <View style={styles.mapContainer}>
+              <MapView
+                style={styles.map}
+                initialRegion={mapRegion}
+                scrollEnabled={false}
+                zoomEnabled={false}
+                rotateEnabled={false}
+                pitchEnabled={false}
+              >
+                <Polyline
+                  coordinates={summary.route}
+                  strokeColor="#000000"
+                  strokeWidth={4}
+                />
+                <Marker
+                  coordinate={summary.route[0]}
+                  title="Start"
+                  pinColor="green"
+                />
+                <Marker
+                  coordinate={summary.route[summary.route.length - 1]}
+                  title="Finish"
+                  pinColor="red"
+                />
+              </MapView>
+            </View>
+          )}
 
           {/* Overall Stats */}
           <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{distanceValue}</Text>
-              <Text style={styles.statLabel}>{distanceUnit.toUpperCase()}</Text>
-            </View>
+            {distanceValue && (
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>{distanceValue}</Text>
+                <Text style={styles.statLabel}>{distanceUnit.toUpperCase()}</Text>
+              </View>
+            )}
             <View style={styles.statCard}>
               <Text style={styles.statValue}>{formatDuration(summary.duration)}</Text>
               <Text style={styles.statLabel}>DURATION</Text>
             </View>
+            {distanceValue && avgPaceSeconds > 0 && (
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>{formatPace(avgPaceSeconds)}</Text>
+                <Text style={styles.statLabel}>PACE {paceUnit}</Text>
+              </View>
+            )}
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>{formatPace(avgPaceSeconds)}</Text>
-              <Text style={styles.statLabel}>PACE {paceUnit}</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{summary.avgCadence}</Text>
+              <Text style={styles.statValue}>{summary.avgCadence || '--'}</Text>
               <Text style={styles.statLabel}>AVG SPM</Text>
             </View>
           </View>
