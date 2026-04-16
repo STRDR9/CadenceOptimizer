@@ -158,70 +158,94 @@ class SpotifyService {
     }
   }
 
-  // Search tracks by BPM range
+  // Search tracks by BPM using playlist search
+  // (audio-features endpoint is deprecated for new apps since Nov 2024)
   async searchByBPM(targetBPM, tolerance = 3, limit = 30) {
-    // Search for energetic/running tracks
-    const queries = [
-      'running workout',
-      'high energy',
-      'workout motivation',
-      'running mix',
-      'cardio',
-    ];
-    const query = queries[Math.floor(Math.random() * queries.length)];
+      const allTracks = new Map(); // dedupe by track id
 
-    const data = await this.apiRequest(
-      `${SPOTIFY_CONFIG.endpoints.api}/search?q=${encodeURIComponent(query)}&type=track&limit=50`
-    );
+      // Strategy 1: Search for BPM-specific playlists
+      const playlistQueries = [
+        `${targetBPM} bpm running`,
+        `${targetBPM} bpm workout`,
+        `${targetBPM} bpm`,
+      ];
 
-    if (!data.tracks?.items?.length) return [];
+      for (const query of playlistQueries) {
+        try {
+          const data = await this.apiRequest(
+            `${SPOTIFY_CONFIG.endpoints.api}/search?q=${encodeURIComponent(query)}&type=playlist&limit=5`
+          );
 
-    // Get audio features (BPM) for all tracks
-    const trackIds = data.tracks.items.map(t => t.id).join(',');
-    const features = await this.apiRequest(
-      `${SPOTIFY_CONFIG.endpoints.api}/audio-features?ids=${trackIds}`
-    );
-
-    if (!features.audio_features) return [];
-
-    // Match tracks to target BPM
-    const minBPM = targetBPM - tolerance;
-    const maxBPM = targetBPM + tolerance;
-    // Also check half-time (some tracks report double BPM)
-    const minHalf = (targetBPM / 2) - tolerance;
-    const maxHalf = (targetBPM / 2) + tolerance;
-
-    const matched = [];
-    for (let i = 0; i < data.tracks.items.length; i++) {
-      const track = data.tracks.items[i];
-      const af = features.audio_features[i];
-      if (!af) continue;
-
-      const tempo = Math.round(af.tempo);
-      const isMatch = (tempo >= minBPM && tempo <= maxBPM);
-      const isHalfMatch = (tempo >= minHalf && tempo <= maxHalf);
-
-      if (isMatch || isHalfMatch) {
-        matched.push({
-          id: track.id,
-          uri: track.uri,
-          name: track.name,
-          artist: track.artists.map(a => a.name).join(', '),
-          album: track.album.name,
-          albumArt: track.album.images?.[1]?.url || track.album.images?.[0]?.url,
-          bpm: isHalfMatch ? tempo * 2 : tempo,
-          duration: track.duration_ms,
-          previewUrl: track.preview_url,
-        });
+          if (data.playlists?.items) {
+            for (const playlist of data.playlists.items) {
+              if (!playlist?.id) continue;
+              try {
+                const tracks = await this.apiRequest(
+                  `${SPOTIFY_CONFIG.endpoints.api}/playlists/${playlist.id}/tracks?limit=30`
+                );
+                if (tracks.items) {
+                  for (const item of tracks.items) {
+                    const track = item.track;
+                    if (!track || !track.id || allTracks.has(track.id)) continue;
+                    allTracks.set(track.id, {
+                      id: track.id,
+                      uri: track.uri,
+                      name: track.name,
+                      artist: track.artists?.map(a => a.name).join(', ') || 'Unknown',
+                      album: track.album?.name || '',
+                      albumArt: track.album?.images?.[1]?.url || track.album?.images?.[0]?.url,
+                      bpm: targetBPM, // assumed from playlist context
+                      duration: track.duration_ms,
+                    });
+                  }
+                }
+              } catch (e) {
+                // Skip this playlist if we can't read it
+              }
+              if (allTracks.size >= limit) break;
+            }
+          }
+        } catch (e) {
+          // Skip this query
+        }
+        if (allTracks.size >= limit) break;
       }
-    }
 
-    return matched.sort((a, b) => {
-      const diffA = Math.abs(a.bpm - targetBPM);
-      const diffB = Math.abs(b.bpm - targetBPM);
-      return diffA - diffB;
-    }).slice(0, limit);
-  }
+      // Strategy 2: Direct track search as fallback
+      if (allTracks.size < 10) {
+        const trackQueries = [
+          `${targetBPM} bpm`,
+          'running workout energy',
+        ];
+        for (const query of trackQueries) {
+          try {
+            const data = await this.apiRequest(
+              `${SPOTIFY_CONFIG.endpoints.api}/search?q=${encodeURIComponent(query)}&type=track&limit=20`
+            );
+            if (data.tracks?.items) {
+              for (const track of data.tracks.items) {
+                if (!track?.id || allTracks.has(track.id)) continue;
+                allTracks.set(track.id, {
+                  id: track.id,
+                  uri: track.uri,
+                  name: track.name,
+                  artist: track.artists?.map(a => a.name).join(', ') || 'Unknown',
+                  album: track.album?.name || '',
+                  albumArt: track.album?.images?.[1]?.url || track.album?.images?.[0]?.url,
+                  bpm: targetBPM,
+                  duration: track.duration_ms,
+                });
+              }
+            }
+          } catch (e) {
+            // Skip
+          }
+          if (allTracks.size >= limit) break;
+        }
+      }
+
+      return Array.from(allTracks.values()).slice(0, limit);
+    }
 
   // Create a playlist on the user's Spotify account
   async createPlaylist(name, trackUris) {
