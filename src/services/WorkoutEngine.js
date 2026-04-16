@@ -135,6 +135,25 @@ export class WorkoutEngine {
     let consecutiveHard = 0;
     let lastCadence = baseCadence;
 
+    // Warmup phase — duration scales with difficulty
+    const warmupDurations = { beginner: 300, intermediate: 240, advanced: 180, elite: 120 };
+    const warmupDuration = warmupDurations[difficulty] || 240;
+    const warmupCadence = Math.round(baseCadence - 10);
+
+    phases.push({
+      id: 0,
+      cadence: warmupCadence,
+      duration: warmupDuration,
+      intensity: 'warmup',
+      type: 'fartlek',
+      coachingCues: coachingEnabled ? [
+        { timing: 0.01, message: `Starting your fartlek workout. ${Math.round(warmupDuration / 60)} minute warmup at ${warmupCadence}. Find your rhythm.`, type: 'instruction' },
+        { timing: 0.85, message: `Warmup almost done. Get ready for speed play.`, type: 'guidance' },
+      ] : [],
+      terrainAdjustment: terrainAware,
+    });
+    currentTime += warmupDuration;
+
     // Generate random phases until we reach target duration
     while (currentTime < duration) {
       const remainingTime = duration - currentTime;
@@ -186,6 +205,21 @@ export class WorkoutEngine {
       currentTime += intervalDuration;
       lastCadence = newCadence;
     }
+
+    // Cooldown phase
+    const cooldownDuration = warmupDuration;
+    phases.push({
+      id: phases.length,
+      cadence: warmupCadence,
+      duration: cooldownDuration,
+      intensity: 'cooldown',
+      type: 'fartlek',
+      coachingCues: coachingEnabled ? [
+        { timing: 0.01, message: `Cool down. Bring it back to ${warmupCadence}. Nice work.`, type: 'guidance' },
+      ] : [],
+      terrainAdjustment: terrainAware,
+    });
+    currentTime += cooldownDuration;
 
     return {
       id: `fartlek_${Date.now()}`,
@@ -297,6 +331,25 @@ export class WorkoutEngine {
     const totalSteps = Math.floor(duration / stepDuration);
     const cadenceRange = endCadence - startCadence;
 
+    // Warmup phase
+    const warmupDuration = 180; // 3 minutes
+    phases.push({
+      id: 0,
+      cadence: Math.round(startCadence - 5),
+      duration: warmupDuration,
+      intensity: 'warmup',
+      type: 'progressive',
+      step: 0,
+      totalSteps,
+      progress: 0,
+      coachingCues: coachingEnabled ? [
+        { timing: 0.01, message: `Starting your progressive workout. Building from ${startCadence} to ${endCadence} over ${Math.round(duration / 60)} minutes. Warming up now.`, type: 'instruction' },
+        { timing: 0.85, message: `Warmup done. Starting the build.`, type: 'guidance' },
+      ] : [],
+      terrainAdjustment: config.terrainAware,
+    });
+    currentTime += warmupDuration;
+
     for (let step = 0; step < totalSteps; step++) {
       let stepCadence;
       
@@ -347,6 +400,24 @@ export class WorkoutEngine {
 
       currentTime += phaseDuration;
     }
+
+    // Cooldown phase
+    const cooldownDuration = 180;
+    phases.push({
+      id: phases.length,
+      cadence: Math.round(startCadence - 5),
+      duration: cooldownDuration,
+      intensity: 'cooldown',
+      type: 'progressive',
+      step: totalSteps + 1,
+      totalSteps,
+      progress: 1,
+      coachingCues: coachingEnabled ? [
+        { timing: 0.01, message: `Cool down. Bring it back easy. Great build.`, type: 'guidance' },
+      ] : [],
+      terrainAdjustment: config.terrainAware,
+    });
+    currentTime += cooldownDuration;
 
     return {
       id: `progressive_${Date.now()}`,
@@ -431,10 +502,16 @@ export class WorkoutEngine {
     switch (phaseType) {
       case 'warmup':
         cues.push({
-          timing: 0,
-          message: `Warmup. Easy pace at ${cadence} steps per minute`,
-          type: 'guidance',
+          timing: 0.01,
+          message: `Starting your interval workout. ${totalIntervals} intervals ahead. Warming up at ${cadence} steps per minute.`,
+          type: 'instruction',
           priority: 'high'
+        });
+        cues.push({
+          timing: 0.85,
+          message: 'Warmup almost done. First interval coming up.',
+          type: 'guidance',
+          priority: 'medium'
         });
         break;
 
