@@ -147,7 +147,7 @@ export class WorkoutEngine {
       intensity: 'warmup',
       type: 'fartlek',
       coachingCues: coachingEnabled ? [
-        { timing: 0.01, message: `Starting your fartlek workout. ${Math.round(warmupDuration / 60)} minute warmup at ${warmupCadence}. Find your rhythm.`, type: 'instruction' },
+        { timing: 0, message: `Starting your fartlek workout. ${Math.round(warmupDuration / 60)} minute warmup at ${warmupCadence}. Find your rhythm.`, type: 'instruction', priority: 'urgent' },
         { timing: 0.85, message: `Warmup almost done. Get ready for speed play.`, type: 'guidance' },
       ] : [],
       terrainAdjustment: terrainAware,
@@ -343,7 +343,7 @@ export class WorkoutEngine {
       totalSteps,
       progress: 0,
       coachingCues: coachingEnabled ? [
-        { timing: 0.01, message: `Starting your progressive workout. Building from ${startCadence} to ${endCadence} over ${Math.round(duration / 60)} minutes. Warming up now.`, type: 'instruction' },
+        { timing: 0, message: `Starting your progressive workout. Building from ${startCadence} to ${endCadence} over ${Math.round(duration / 60)} minutes. Warming up now.`, type: 'instruction', priority: 'urgent' },
         { timing: 0.85, message: `Warmup done. Starting the build.`, type: 'guidance' },
       ] : [],
       terrainAdjustment: config.terrainAware,
@@ -447,32 +447,38 @@ export class WorkoutEngine {
     const cues = [];
     const cadenceChange = newCadence - lastCadence;
 
-    // One cue at phase start — tell the runner what's changing
-    if (Math.abs(cadenceChange) > 10) {
+    // Always announce the phase — no silent transitions
+    if (intensity === 'hard' || cadenceChange > 10) {
       cues.push({
         timing: 0,
         message: `Pick it up to ${newCadence} steps per minute`,
         type: 'motivation',
         priority: 'high'
       });
-    } else if (cadenceChange < -5) {
+    } else if (intensity === 'easy' || cadenceChange < -5) {
       cues.push({
         timing: 0,
         message: `Easy pace. ${newCadence} steps per minute`,
         type: 'guidance',
         priority: 'medium'
       });
-    } else if (Math.abs(cadenceChange) > 5) {
+    } else if (Math.abs(cadenceChange) > 2) {
       cues.push({
         timing: 0,
-        message: `${newCadence} steps per minute`,
+        message: `${cadenceChange > 0 ? 'Up' : 'Down'} to ${newCadence} steps per minute`,
         type: 'instruction',
         priority: 'medium'
       });
+    } else {
+      cues.push({
+        timing: 0,
+        message: `Hold your pace. ${newCadence} steps per minute`,
+        type: 'instruction',
+        priority: 'low'
+      });
     }
-    // Skip cue entirely if cadence barely changed — less noise
 
-    // One mid-phase cue only for hard intervals
+    // Mid-phase cue for hard intervals
     if (intensity === 'hard') {
       cues.push({
         timing: 0.7,
@@ -502,10 +508,10 @@ export class WorkoutEngine {
     switch (phaseType) {
       case 'warmup':
         cues.push({
-          timing: 0.01,
+          timing: 0,
           message: `Starting your interval workout. ${totalIntervals} intervals ahead. Warming up at ${cadence} steps per minute.`,
           type: 'instruction',
-          priority: 'high'
+          priority: 'urgent'
         });
         cues.push({
           timing: 0.85,
@@ -682,10 +688,11 @@ export class WorkoutEngine {
     }
 
     this.cueTimers = [];
-    phase.coachingCues.forEach((cue, index) => {
+    phase.coachingCues.forEach((cue) => {
       const delay = cue.timing * phase.duration * 1000;
       
-      const timer = setTimeout(() => {
+      if (delay <= 50) {
+        // Fire immediately for timing 0 cues
         if (this.isActive && !this.isPaused && this.callbacks.onCoachingCue) {
           try {
             this.callbacks.onCoachingCue(cue.message, cue.type);
@@ -693,8 +700,18 @@ export class WorkoutEngine {
             // Coaching cue callback failed
           }
         }
-      }, delay);
-      this.cueTimers.push(timer);
+      } else {
+        const timer = setTimeout(() => {
+          if (this.isActive && !this.isPaused && this.callbacks.onCoachingCue) {
+            try {
+              this.callbacks.onCoachingCue(cue.message, cue.type);
+            } catch (error) {
+              // Coaching cue callback failed
+            }
+          }
+        }, delay);
+        this.cueTimers.push(timer);
+      }
     });
   }
 
