@@ -170,7 +170,7 @@ The Fartlek workout feature is now fully functional:
 - `src/screens/MetronomeScreen.js` - Main fixes for stale closures
 - `src/services/WorkoutEngine.js` - Enhanced logging
 - `src/services/CoachingVoiceService.js` - Enhanced logging
-- `app.json` - Build number increments
+- `app.json` - Build number increments (note: in this bare-workflow project, EAS reads the iOS build number from `ios/STRDR/Info.plist` and `ios/STRDR.xcodeproj/project.pbxproj`, not `app.json`)
 
 ## Key Learnings
 
