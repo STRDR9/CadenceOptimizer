@@ -45,7 +45,7 @@
 - [x] Bundle ID registered (com.strdr.app)
 - [x] Signing certificates and provisioning profiles set up for distribution
 - [x] Build uploaded via EAS Submit (build 18, TestFlight approved — Mar 29, 2026)
-- [ ] Build 22 uploaded via EAS Submit (first new TestFlight build since build 18; includes onboarding, Spotify, route tracking, post-workout summary, History tab, pause/resume, metronome UI overhaul, voice coaching fixes, release-build crash fixes)
+- [x] Build 22 uploaded to App Store Connect (May 17, 2026; processing for TestFlight). Includes onboarding, Spotify, route tracking, post-workout summary, History tab, pause/resume, metronome UI overhaul, voice coaching fixes, release-build crash fixes
 - [ ] App information filled out (subtitle, promotional text, support URL)
 - [ ] Contact information and demo account (if needed for review)
 - [ ] Set pricing (free, paid, or freemium)

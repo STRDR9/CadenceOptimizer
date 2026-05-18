@@ -17,7 +17,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.strdr.app",
-      "buildNumber": "22",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "STRDR uses your location for terrain detection and GPS-based cadence adjustments during runs.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "STRDR uses your location for terrain detection and GPS-based cadence adjustments during runs.",
