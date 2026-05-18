@@ -117,7 +117,7 @@
 ### **Latest Production Build — Build 22 (May 17, 2026)**
 - **Build ID:** c87333dc-60ca-413a-98ad-67334c8e62a3
 - **Platform:** iOS
-- **Status:** ✅ Finished Successfully, uploaded to App Store Connect (TestFlight processing)
+- **Status:** ✅ Finished Successfully, live on TestFlight (May 17, 2026)
 - **Profile:** Production (App Store Distribution)
 - **SDK Version:** 54.0.0
 - **App Version:** 1.0.0
