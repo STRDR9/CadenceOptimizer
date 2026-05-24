@@ -81,7 +81,7 @@ This will:
 **Screenshot 5: Runner Profile**
 - Show profile setup
 - Display personalized recommendations
-- Show analytics dashboard
+- Show post-workout summary or History tab
 
 ### How to Create Screenshots
 

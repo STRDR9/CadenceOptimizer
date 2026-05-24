@@ -58,7 +58,7 @@ npx expo run:ios --device --configuration Release
 src/
 ├── screens/           # MetronomeScreen, TargetsScreen, AnalysisScreen, etc.
 ├── services/          # WorkoutEngine, CoachingVoiceService, FitFileParser, etc.
-├── components/        # PreWorkoutCheckIn, AnalyticsDashboard, charts/
+├── components/        # PreWorkoutCheckIn, FeedbackModal, charts/
 └── utils/             # Helpers and constants
 ```
 

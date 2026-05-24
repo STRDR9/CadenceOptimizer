@@ -161,7 +161,6 @@
 - Runner profile setup (age, weight, height, experience)
 - Target cadence configuration
 - Audio/coaching preferences
-- Analytics dashboard (development mode)
 
 ---
 

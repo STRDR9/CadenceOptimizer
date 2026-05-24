@@ -2,7 +2,7 @@
 
 ## Code Cleanup
 - [x] Remove all debug console.log statements ([FARTLEK], race calculator logs, etc.)
-- [ ] Remove expo-dev-client / dev menu from production build
+- [x] Remove expo-dev-client / dev menu from production build (debug Analytics button + dashboard removed in build 23; dev menu confirmed not user-reachable)
 - [x] Remove any debug alerts (e.g., "Mode Check" alert)
 - [x] Audit all TODO/FIXME comments in codebase
 - [x] Review error handling — no raw error messages shown to users

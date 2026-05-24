@@ -46,11 +46,7 @@ STRDR now includes comprehensive analytics tracking to understand user behavior,
 
 ## Analytics Dashboard
 
-### 🔍 Development View
-- **Real-time Events**: View live analytics as they happen
-- **Session Summary**: Total events, duration, feature usage
-- **Feature Metrics**: Usage counts for each major feature
-- **Recent Activity**: Last 20 user actions with timestamps
+> **Note:** The in-app development dashboard (📊 button on Home screen) was removed in build 23 ahead of App Store submission. The analytics service itself is still active — events are tracked locally and can be inspected via React Native debugger or by extending `AnalyticsService` to emit logs / sync to a server. Re-introduce a developer-only UI if needed (e.g. gated behind `__DEV__`).
 
 ### 📈 Key Metrics Tracked
 - **Daily Active Users**: Session frequency and duration
@@ -122,7 +118,6 @@ analytics.trackScreen('HomeScreen');
 - [x] Analytics service architecture
 - [x] Local event storage and management
 - [x] Core tracking points across all screens
-- [x] Development analytics dashboard
 - [x] Privacy-first data handling
 - [x] Error tracking and performance monitoring
 
@@ -133,19 +128,19 @@ analytics.trackScreen('HomeScreen');
 - [x] Privacy compliant
 - [x] Easy to extend and customize
 
-## Access Analytics Dashboard
+## Access Analytics Data
 
-### 🛠️ Development Mode
-1. Open STRDR app
-2. Go to Home screen
-3. Tap the 📊 button in bottom-right corner
-4. View real-time analytics data
+### 🛠️ During Development
+The in-app dashboard was removed in build 23. To inspect analytics events during development:
+1. Open STRDR with the dev client connected
+2. Use `console.log(await analytics.getRecentEvents())` from a debug screen, or
+3. Inspect `AsyncStorage` for the analytics keys via React Native debugger
 
 ### 📱 Production Considerations
-- Remove analytics button from production builds
-- Add server sync for aggregated insights
-- Implement user consent for analytics
-- Add analytics export functionality
+- ✅ In-app dashboard / debug button removed for App Store build
+- Add server sync for aggregated insights (future)
+- Implement user consent flow for analytics (future)
+- Add analytics export functionality (future)
 
 ---
 
