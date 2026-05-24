@@ -199,7 +199,13 @@ npx expo install @react-native-firebase/app @react-native-firebase/analytics
 
 ### Regular Updates
 ```bash
-# Increment version in app.json
+# Bump the version string in app.json (e.g. "1.0.0" -> "1.0.1")
+# Bump the iOS build number in BOTH:
+#   - ios/STRDR/Info.plist            (CFBundleVersion)
+#   - ios/STRDR.xcodeproj/project.pbxproj  (CURRENT_PROJECT_VERSION)
+# Bump the Android versionCode in app.json
+# (This is a bare-workflow project — EAS does NOT read iOS buildNumber from app.json)
+
 # Build and submit new version
 eas build --platform all --profile production
 eas submit --platform all --profile production
