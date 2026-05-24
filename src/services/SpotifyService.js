@@ -158,94 +158,124 @@ class SpotifyService {
     }
   }
 
-  // Search tracks by BPM using playlist search
-  // (audio-features endpoint is deprecated for new apps since Nov 2024)
+  // Search tracks by BPM using playlist search.
+  // Spotify deprecated /audio-features for new apps in Nov 2024, so we
+  // can't filter by actual track tempo anymore. Instead we search playlists
+  // whose names reference the target BPM, plus half-tempo matches (a 170 SPM
+  // runner can also run to 85 BPM tracks at 2 steps per beat), plus a
+  // curated running-playlist fallback so the user always gets results.
   async searchByBPM(targetBPM, tolerance = 3, limit = 30) {
-      const allTracks = new Map(); // dedupe by track id
+    const allTracks = new Map(); // dedupe by track id
+    const halfBpm = Math.round(targetBPM / 2);
 
-      // Strategy 1: Search for BPM-specific playlists
-      const playlistQueries = [
-        `${targetBPM} bpm running`,
-        `${targetBPM} bpm workout`,
-        `${targetBPM} bpm`,
+    // BPM candidates to search for, in priority order:
+    //   exact match, ±1, ±2, half-tempo, ±3
+    const bpmCandidates = [];
+    const seen = new Set();
+    const push = (b) => {
+      if (b > 0 && !seen.has(b)) {
+        seen.add(b);
+        bpmCandidates.push(b);
+      }
+    };
+    push(targetBPM);
+    for (let i = 1; i <= tolerance; i++) {
+      push(targetBPM - i);
+      push(targetBPM + i);
+    }
+    push(halfBpm);
+    push(halfBpm - 1);
+    push(halfBpm + 1);
+
+    const harvestPlaylistTracks = async (playlistId, displayBpm, source) => {
+      try {
+        const tracks = await this.apiRequest(
+          `${SPOTIFY_CONFIG.endpoints.api}/playlists/${playlistId}/tracks?limit=20`
+        );
+        if (!tracks?.items) return;
+        for (const item of tracks.items) {
+          const track = item?.track;
+          if (!track || !track.id || allTracks.has(track.id)) continue;
+          allTracks.set(track.id, {
+            id: track.id,
+            uri: track.uri,
+            name: track.name,
+            artist: track.artists?.map(a => a.name).join(', ') || 'Unknown',
+            album: track.album?.name || '',
+            albumArt: track.album?.images?.[1]?.url || track.album?.images?.[0]?.url,
+            bpm: displayBpm,
+            duration: track.duration_ms,
+            matchSource: source,
+          });
+          if (allTracks.size >= limit) return;
+        }
+      } catch (e) {
+        // skip unreadable playlist
+      }
+    };
+
+    // Strategy 1: BPM-named playlists (priority on exact, then near, then half-tempo)
+    for (const bpm of bpmCandidates) {
+      if (allTracks.size >= limit) break;
+
+      const queries = [
+        `${bpm} bpm running`,
+        `${bpm} bpm workout`,
+        `${bpm} bpm`,
       ];
+      const isHalfTempo = bpm === halfBpm || bpm === halfBpm - 1 || bpm === halfBpm + 1;
+      const displayBpm = isHalfTempo ? `${bpm}×2` : bpm;
+      const source = isHalfTempo ? 'half-tempo' : 'bpm-playlist';
 
-      for (const query of playlistQueries) {
+      for (const query of queries) {
+        if (allTracks.size >= limit) break;
         try {
           const data = await this.apiRequest(
             `${SPOTIFY_CONFIG.endpoints.api}/search?q=${encodeURIComponent(query)}&type=playlist&limit=5`
           );
-
           if (data.playlists?.items) {
             for (const playlist of data.playlists.items) {
-              if (!playlist?.id) continue;
-              try {
-                const tracks = await this.apiRequest(
-                  `${SPOTIFY_CONFIG.endpoints.api}/playlists/${playlist.id}/tracks?limit=30`
-                );
-                if (tracks.items) {
-                  for (const item of tracks.items) {
-                    const track = item.track;
-                    if (!track || !track.id || allTracks.has(track.id)) continue;
-                    allTracks.set(track.id, {
-                      id: track.id,
-                      uri: track.uri,
-                      name: track.name,
-                      artist: track.artists?.map(a => a.name).join(', ') || 'Unknown',
-                      album: track.album?.name || '',
-                      albumArt: track.album?.images?.[1]?.url || track.album?.images?.[0]?.url,
-                      bpm: targetBPM, // assumed from playlist context
-                      duration: track.duration_ms,
-                    });
-                  }
-                }
-              } catch (e) {
-                // Skip this playlist if we can't read it
-              }
               if (allTracks.size >= limit) break;
+              if (!playlist?.id) continue;
+              await harvestPlaylistTracks(playlist.id, displayBpm, source);
             }
           }
         } catch (e) {
-          // Skip this query
-        }
-        if (allTracks.size >= limit) break;
-      }
-
-      // Strategy 2: Direct track search as fallback
-      if (allTracks.size < 10) {
-        const trackQueries = [
-          `${targetBPM} bpm`,
-          'running workout energy',
-        ];
-        for (const query of trackQueries) {
-          try {
-            const data = await this.apiRequest(
-              `${SPOTIFY_CONFIG.endpoints.api}/search?q=${encodeURIComponent(query)}&type=track&limit=20`
-            );
-            if (data.tracks?.items) {
-              for (const track of data.tracks.items) {
-                if (!track?.id || allTracks.has(track.id)) continue;
-                allTracks.set(track.id, {
-                  id: track.id,
-                  uri: track.uri,
-                  name: track.name,
-                  artist: track.artists?.map(a => a.name).join(', ') || 'Unknown',
-                  album: track.album?.name || '',
-                  albumArt: track.album?.images?.[1]?.url || track.album?.images?.[0]?.url,
-                  bpm: targetBPM,
-                  duration: track.duration_ms,
-                });
-              }
-            }
-          } catch (e) {
-            // Skip
-          }
-          if (allTracks.size >= limit) break;
+          // skip query
         }
       }
-
-      return Array.from(allTracks.values()).slice(0, limit);
     }
+
+    // Strategy 2: Curated running playlists fallback. Always runs if we
+    // haven't hit the limit, so the user gets *something* even if their
+    // exact BPM has no matching playlists.
+    if (allTracks.size < limit) {
+      const fallbackQueries = [
+        'running playlist',
+        'running cadence',
+        'marathon training',
+      ];
+      for (const query of fallbackQueries) {
+        if (allTracks.size >= limit) break;
+        try {
+          const data = await this.apiRequest(
+            `${SPOTIFY_CONFIG.endpoints.api}/search?q=${encodeURIComponent(query)}&type=playlist&limit=3`
+          );
+          if (data.playlists?.items) {
+            for (const playlist of data.playlists.items) {
+              if (allTracks.size >= limit) break;
+              if (!playlist?.id) continue;
+              await harvestPlaylistTracks(playlist.id, '~', 'running-curated');
+            }
+          }
+        } catch (e) {
+          // skip
+        }
+      }
+    }
+
+    return Array.from(allTracks.values()).slice(0, limit);
+  }
 
   // Create a playlist on the user's Spotify account
   async createPlaylist(name, trackUris) {

@@ -25,6 +25,7 @@ export default function SpotifyPlaylistBuilder({ visible, onClose, targetCadence
   const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
+  const [hasSearched, setHasSearched] = useState(false);
   const [playlist, setPlaylist] = useState([]);
   const [saving, setSaving] = useState(false);
   const [userName, setUserName] = useState('');
@@ -61,12 +62,10 @@ export default function SpotifyPlaylistBuilder({ visible, onClose, targetCadence
 
   const handleSearch = async () => {
     setLoading(true);
+    setHasSearched(true);
     try {
-      const results = await SpotifyService.searchByBPM(targetCadence, 3, 20);
+      const results = await SpotifyService.searchByBPM(targetCadence, 3, 30);
       setSearchResults(results);
-      if (results.length === 0) {
-        Alert.alert('No Matches', `No tracks found near ${targetCadence} BPM. Try adjusting your cadence.`);
-      }
     } catch (error) {
       Alert.alert('Search Error', 'Could not search Spotify. Try again.');
     } finally {
@@ -113,6 +112,7 @@ export default function SpotifyPlaylistBuilder({ visible, onClose, targetCadence
     setIsConnected(false);
     setUserName('');
     setSearchResults([]);
+    setHasSearched(false);
     setPlaylist([]);
   };
 
@@ -196,6 +196,16 @@ export default function SpotifyPlaylistBuilder({ visible, onClose, targetCadence
               </View>
             )}
 
+            {/* Empty state — only after a search has been attempted */}
+            {hasSearched && !loading && searchResults.length === 0 && (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>No tracks found</Text>
+                <Text style={styles.emptyDesc}>
+                  Spotify doesn't have BPM-tagged playlists for {targetCadence} BPM right now. Try changing your cadence in the metronome and search again, or open Spotify directly to browse running playlists.
+                </Text>
+              </View>
+            )}
+
             {/* Search Results */}
             {searchResults.map((track) => (
               <TouchableOpacity
@@ -210,6 +220,12 @@ export default function SpotifyPlaylistBuilder({ visible, onClose, targetCadence
                 <View style={styles.trackInfo}>
                   <Text style={styles.trackName} numberOfLines={1}>{track.name}</Text>
                   <Text style={styles.trackArtist} numberOfLines={1}>{track.artist}</Text>
+                  {track.matchSource === 'half-tempo' && (
+                    <Text style={styles.matchHint}>2 steps per beat</Text>
+                  )}
+                  {track.matchSource === 'running-curated' && (
+                    <Text style={styles.matchHint}>From a running playlist</Text>
+                  )}
                 </View>
                 <View style={styles.trackMeta}>
                   <Text style={styles.trackBPM}>{track.bpm}</Text>
@@ -411,6 +427,31 @@ const styles = StyleSheet.create({
   trackArtist: {
     fontSize: 13,
     color: '#666',
+  },
+  matchHint: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1DB954',
+    marginTop: 2,
+    letterSpacing: 0.3,
+  },
+  emptyState: {
+    paddingHorizontal: 32,
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#000',
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
+  emptyDesc: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 22,
   },
   trackMeta: {
     alignItems: 'center',
