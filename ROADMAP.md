@@ -47,7 +47,7 @@ BPM-matched music to sync with running cadence.
 - [ ] Apple Music support (stretch goal)
 
 ### V2 Upgrade: Third-Party BPM Database
-Spotify deprecated the `audio-features` endpoint (BPM/tempo data) for new apps in Nov 2024. The current approach searches BPM-curated playlists on Spotify, which works but relies on playlist creators tagging BPM correctly.
+Spotify deprecated the `audio-features` endpoint (BPM/tempo data) for new apps in Nov 2024. The current approach searches BPM-curated playlists on Spotify across the target cadence ± a tolerance window, plus half-tempo matches (e.g., 170 SPM also pulls 85 BPM tracks since runners can hit 2 steps per beat), with a curated "running playlist" fallback so the user always gets results. It works but relies on playlist creators tagging BPM correctly, and BPM values shown for half-tempo / fallback tracks are approximate.
 
 A more accurate V2 approach would use a third-party BPM database (e.g., GetSongBPM, Songdata.io) to:
 1. Query songs by exact BPM range
