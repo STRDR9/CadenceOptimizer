@@ -114,22 +114,24 @@
 
 ## 🎯 **Current Build Information**
 
-### **Latest Production Build — Build 22 (May 17, 2026)**
-- **Build ID:** c87333dc-60ca-413a-98ad-67334c8e62a3
+### **Latest Production Build — Build 25**
+- **Build ID:** 5abbdd79-ec8b-411e-ba2b-729a6865ae45
 - **Platform:** iOS
-- **Status:** ✅ Finished Successfully, live on TestFlight (May 17, 2026)
+- **Status:** ✅ Finished Successfully, uploaded to App Store Connect (TestFlight processing)
 - **Profile:** Production (App Store Distribution)
 - **SDK Version:** 54.0.0
 - **App Version:** 1.0.0
-- **Build Number:** 22
-- **Download:** https://expo.dev/artifacts/eas/qKD9woZV2SLAGksxjmdqoF.ipa
-- **Logs:** https://expo.dev/accounts/andybies/projects/strdr/builds/c87333dc-60ca-413a-98ad-67334c8e62a3
-- **Commit:** e47c915 (`Bump native iOS build to 22`)
+- **Build Number:** 25
+- **Logs:** https://expo.dev/accounts/andybies/projects/strdr/builds/5abbdd79-ec8b-411e-ba2b-729a6865ae45
+- **Includes:** AnalyticsDashboard removed (debug 📊 button gone), Spotify BPM search overhaul (±tolerance window + half-tempo matches + curated running playlist fallback)
+- **Submission note:** Builds 23 and 24 failed App Store Connect submission with a generic "something went wrong". Wiring `ascAppId: "6758683882"` into `eas.json` `submit.production.ios` resolved it; build 25 went through cleanly.
 
-### **Previous TestFlight Build — Build 18 (March 29, 2026)**
-- **Build ID:** 2f59acbf-f5e1-4e94-bf95-511c791ee1bf
-- **Status:** Finished, approved on TestFlight
-- **Note:** Multiple commits between build 18 and build 22 attempted to bump the build number via `app.json`, but EAS reads the iOS build number from `ios/STRDR/Info.plist` and `ios/STRDR.xcodeproj/project.pbxproj` in this bare-workflow project. Bumps in those native files (and only those) increment the TestFlight build number.
+### **Previous TestFlight Builds**
+- **Build 22** (May 17, 2026, c87333dc) — onboarding, Spotify, route tracking, post-workout summary, History tab, pause/resume, metronome UI overhaul, voice coaching fixes, release-build crash fixes. Live on TestFlight.
+- **Build 18** (March 29, 2026, 2f59acbf) — first TestFlight-approved build.
+
+### **Bare-Workflow Build Number Note**
+EAS reads the iOS build number from `ios/STRDR/Info.plist` (`CFBundleVersion`) and `ios/STRDR.xcodeproj/project.pbxproj` (`CURRENT_PROJECT_VERSION`), not from `app.json`. To increment the TestFlight build number, bump both native files. The `buildNumber` field was removed from `app.json` to avoid future confusion.
 
 ### **EAS Project**
 - **Project ID:** 14ae14a4-fe5b-4e54-9b5b-7f91e79e08a5
