@@ -141,7 +141,7 @@ export default function HomeScreen({ navigation }) {
       </View>
     ) : (
     // MAIN HOME: Profile exists — show workout-focused home
-    <>
+    <View style={styles.container}>
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Logo Section */}
       <View style={styles.logoSection}>
@@ -238,23 +238,23 @@ export default function HomeScreen({ navigation }) {
 
       {/* Bottom Spacer */}
       <View style={styles.bottomSpacer} />
-      
-      {/* Floating Action Buttons */}
-      <TouchableOpacity 
-        style={styles.feedbackButton}
-        onPress={() => setShowFeedback(true)}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.feedbackButtonText}>💬</Text>
-      </TouchableOpacity>
     </ScrollView>
+
+    {/* Floating Feedback Button — sibling of ScrollView so it stays fixed over the viewport */}
+    <TouchableOpacity 
+      style={styles.feedbackButton}
+      onPress={() => setShowFeedback(true)}
+      activeOpacity={0.7}
+    >
+      <Text style={styles.feedbackButtonText}>💬</Text>
+    </TouchableOpacity>
     
     {/* Feedback Modal */}
     <FeedbackModal
       visible={showFeedback}
       onClose={() => setShowFeedback(false)}
     />
-    </>
+    </View>
     )}
     </>
   );
