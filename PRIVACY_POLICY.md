@@ -85,7 +85,7 @@ If we update this policy, the updated version will be available at the same URL.
 
 If you have questions about this privacy policy or the app:
 
-**Email**: andybiesiadecki@gmail.com
+**Email**: STRDR99@gmail.com
 
 ---
 

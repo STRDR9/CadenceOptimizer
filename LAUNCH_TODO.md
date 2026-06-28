@@ -47,7 +47,7 @@
 - [x] Build uploaded via EAS Submit (build 18, TestFlight approved — Mar 29, 2026)
 - [x] Build 22 live on TestFlight (May 17, 2026). Includes onboarding, Spotify, route tracking, post-workout summary, History tab, pause/resume, metronome UI overhaul, voice coaching fixes, release-build crash fixes
 - [x] Build 25 uploaded to App Store Connect via EAS Submit. Removes debug Analytics dashboard, widens Spotify BPM search (±tolerance + half-tempo + curated running fallback). Build 23 and 24 attempts failed submission; build 25 went through cleanly after wiring `ascAppId` into `eas.json`.
-- [ ] Create dedicated helpdesk / support email (e.g. support@strdr.app or hello@strdr.app) — current placeholder is andybiesiadecki@gmail.com; replace before launch in PRIVACY_POLICY.md, APP_STORE_COPY.md, and App Store Connect contact info
+- [x] Create dedicated support email — using STRDR99@gmail.com (replaces personal gmail per tester feedback). Set in PRIVACY_POLICY.md; still needs to be set in App Store Connect contact info and the hosted gist. Optionally upgrade to support@strdr.app later if a domain is registered.
 - [ ] App information filled out (subtitle, promotional text, support URL)
 - [ ] Contact information and demo account (if needed for review)
 - [ ] Set pricing (free, paid, or freemium)
