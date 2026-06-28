@@ -29,7 +29,7 @@ Hands-free coaching cues during structured workouts — phase changes, pacing re
 
 ## Privacy
 
-All data stays on your device. No accounts, no servers, no tracking. Full policy: [Privacy Policy](https://gist.github.com/Andybiesiadecki/a46feb6980e6c22bbd1e71723df6820b)
+All data stays on your device. No accounts, no servers, no tracking. Full policy: [Privacy Policy](https://gist.github.com/STRDR9/a46feb6980e6c22bbd1e71723df6820b)
 
 ## Tech Stack
 

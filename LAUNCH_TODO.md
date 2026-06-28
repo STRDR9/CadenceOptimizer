@@ -34,7 +34,7 @@
 - [ ] Age rating questionnaire completed
 
 ## Legal & Privacy
-- [x] Privacy policy hosted at a public URL (https://gist.github.com/Andybiesiadecki/a46feb6980e6c22bbd1e71723df6820b — needs update to match the rewritten PRIVACY_POLICY.md)
+- [x] Privacy policy hosted at a public URL (https://gist.github.com/STRDR9/a46feb6980e6c22bbd1e71723df6820b — needs update to match the rewritten PRIVACY_POLICY.md)
 - [x] Review data collection — audit complete (June 16, 2026): runs/profile/feedback/crashes/analytics all stay on-device; Spotify is the only outbound data path, and only when user opts in. PRIVACY_POLICY.md updated to reflect.
 - [ ] App Store privacy nutrition labels filled out accurately (cheat sheet ready: only Spotify OAuth fields — email, display name, user ID — count as "collected" per Apple's definition; everything else is local-only)
 - [ ] Terms of service (optional but recommended)
