@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Animated } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { getRunnerProfile } from '../utils/storage';
 import analytics from '../services/AnalyticsService';
@@ -11,6 +12,66 @@ export default function HomeScreen({ navigation }) {
   const [hasProfile, setHasProfile] = useState(false);
   const [profile, setProfile] = useState(null);
   const [showFeedback, setShowFeedback] = useState(false);
+
+  const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
+
+  // Snappy collapse — completes over ~60px of scroll
+  const COLLAPSE_DISTANCE = 60;
+
+  // Large wordmark fades out over the first ~45px, shrinks + tucks up over the full distance
+  const largeLogoOpacity = scrollY.interpolate({
+    inputRange: [0, 45],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+  const largeLogoScale = scrollY.interpolate({
+    inputRange: [0, COLLAPSE_DISTANCE],
+    outputRange: [1, 0.7],
+    extrapolate: 'clamp',
+  });
+  const largeLogoTranslateY = scrollY.interpolate({
+    inputRange: [0, COLLAPSE_DISTANCE],
+    outputRange: [0, -12],
+    extrapolate: 'clamp',
+  });
+  // Compact banner fades in only after the large wordmark is gone — no double exposure
+  const bannerOpacity = scrollY.interpolate({
+    inputRange: [45, COLLAPSE_DISTANCE],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const onScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+    { useNativeDriver: true }
+  );
+
+  // Pinned compact "STRDR" banner that tucks in as the large wordmark collapses
+  const CompactBanner = () => (
+    <Animated.View
+      pointerEvents="none"
+      style={[styles.compactBanner, { opacity: bannerOpacity }]}
+    >
+      <Text style={styles.compactBannerText}>STRDR</Text>
+    </Animated.View>
+  );
+
+  // Animated wrapper for the large in-content wordmark (shrink + fade)
+  const AnimatedLogo = ({ subheader }) => (
+    <Animated.View
+      style={[
+        styles.logoSection,
+        {
+          opacity: largeLogoOpacity,
+          transform: [{ scale: largeLogoScale }, { translateY: largeLogoTranslateY }],
+        },
+      ]}
+    >
+      <Text style={styles.logoText}>STRDR</Text>
+      <Text style={styles.subheaderText}>{subheader}</Text>
+    </Animated.View>
+  );
 
   useEffect(() => {
     checkProfile();
@@ -60,12 +121,14 @@ export default function HomeScreen({ navigation }) {
     <>
     {!hasProfile ? (
       // ONBOARDING: No profile yet — guide user to set one up
-      <View style={styles.container}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.onboardingContent}>
-          <View style={styles.logoSection}>
-            <Text style={styles.logoText}>STRDR</Text>
-            <Text style={styles.subheaderText}>Cadence and Speed Optimizer</Text>
-          </View>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <Animated.ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.onboardingContent}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+        >
+          <AnimatedLogo subheader="Cadence and Speed Optimizer" />
 
           <View style={styles.welcomeSection}>
             <Text style={styles.welcomeTitle}>Welcome, Runner</Text>
@@ -123,7 +186,10 @@ export default function HomeScreen({ navigation }) {
           >
             <Text style={styles.skipLinkText}>Skip for now — go straight to the metronome</Text>
           </TouchableOpacity>
-        </ScrollView>
+        </Animated.ScrollView>
+
+        {/* Pinned compact wordmark that tucks in as the large logo collapses */}
+        <CompactBanner />
 
         {/* Feedback button still available */}
         <TouchableOpacity
@@ -138,16 +204,18 @@ export default function HomeScreen({ navigation }) {
           visible={showFeedback}
           onClose={() => setShowFeedback(false)}
         />
-      </View>
+      </SafeAreaView>
     ) : (
     // MAIN HOME: Profile exists — show workout-focused home
-    <View style={styles.container}>
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Logo Section */}
-      <View style={styles.logoSection}>
-        <Text style={styles.logoText}>STRDR</Text>
-        <Text style={styles.subheaderText}>Running and Cadence Optimizer</Text>
-      </View>
+    <SafeAreaView style={styles.container} edges={['top']}>
+    <Animated.ScrollView
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
+    >
+      {/* Collapsing wordmark */}
+      <AnimatedLogo subheader="Running and Cadence Optimizer" />
 
       {/* Quick Actions Section */}
       <View style={styles.actionsSection}>
@@ -238,7 +306,10 @@ export default function HomeScreen({ navigation }) {
 
       {/* Bottom Spacer */}
       <View style={styles.bottomSpacer} />
-    </ScrollView>
+    </Animated.ScrollView>
+
+    {/* Pinned compact wordmark that tucks in as the large logo collapses */}
+    <CompactBanner />
 
     {/* Floating Feedback Button — sibling of ScrollView so it stays fixed over the viewport */}
     <TouchableOpacity 
@@ -254,7 +325,7 @@ export default function HomeScreen({ navigation }) {
       visible={showFeedback}
       onClose={() => setShowFeedback(false)}
     />
-    </View>
+    </SafeAreaView>
     )}
     </>
   );
@@ -264,6 +335,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+
+  // Pinned compact wordmark banner (fades in as the large logo collapses on scroll)
+  compactBanner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 52,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  compactBannerText: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#000000',
+    letterSpacing: 4,
   },
   
   // Logo Section Styles
