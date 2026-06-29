@@ -65,7 +65,8 @@
       "expo-av",
       "expo-document-picker",
       "expo-file-system",
-      "expo-web-browser"
+      "expo-web-browser",
+      "react-native-audio-api"
     ],
     "extra": {
       "eas": {

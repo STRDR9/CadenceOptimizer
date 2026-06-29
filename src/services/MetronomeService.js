@@ -1,404 +1,142 @@
 // Metronome Service
-// Handles audio metronome functionality with expo-av
+// Sample-accurate metronome using react-native-audio-api (Web Audio engine).
+// Clicks are SCHEDULED ahead on the audio clock — gapless, drift-free, and keeps
+// playing when the screen is locked / backgrounded. Layers over music.
 
-import { Audio } from 'expo-av';
+import { AudioContext, AudioManager } from 'react-native-audio-api';
+
+const CLICK_MS = 22;          // click length
+const LOOKAHEAD_MS = 25;      // how often the scheduler timer runs
+const SCHEDULE_AHEAD = 0.2;   // seconds of clicks queued ahead (covers JS jitter/background)
 
 export class MetronomeService {
   constructor() {
     this.isPlaying = false;
-    this.intervalId = null;
+    this.timerId = null;
     this.currentBeat = 0;
     this.bpm = 170;
     this.soundType = 'click';
     this.volume = 0.8;
     this.audioEnabled = true;
-    this.sounds = {};
     this.isInitialized = false;
+    this.ctx = null;
+    this.clickBuffer = null;
+    this.accentBuffer = null;
+    this.nextNoteTime = 0;
+    this.onBeat = null;
   }
 
-  /**
-   * Initialize audio system and load sounds
-   */
   async initialize() {
     if (this.isInitialized) return;
-
     try {
-      // Set audio mode for playback
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
+      // iOS: playback category + mixWithOthers => background audio AND layers over music.
+      try {
+        AudioManager.setAudioSessionOptions({
+          iosCategory: 'playback',
+          iosMode: 'default',
+          iosOptions: ['mixWithOthers'],
+        });
+        AudioManager.setAudioSessionActivity(true);
+      } catch (e) {
+        // Non-iOS or unavailable — safe to ignore.
+      }
 
-      // Create audio objects for different sound types
-      await this.loadSounds();
+      this.ctx = new AudioContext();
+      this.clickBuffer = this.makeClick(1000);  // normal beat
+      this.accentBuffer = this.makeClick(1400); // accent (reserved; not used by default)
       this.isInitialized = true;
     } catch (error) {
       console.error('Failed to initialize MetronomeService:', error);
     }
   }
 
-  /**
-   * Load metronome sounds
-   */
-  async loadSounds() {
-    try {
-      if (typeof window !== 'undefined' && window.AudioContext) {
-        // Web platform - use Web Audio API
-        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        this.sounds = {
-          normal: { frequency: 800, duration: 0.1 },
-          accent: { frequency: 1200, duration: 0.15 },
-        };
-        this.platform = 'web';
-      } else {
-        // Mobile platform - use expo-av
-        await this.loadMobileSounds();
-        this.platform = 'mobile';
-      }
-    } catch (error) {
-      console.error('Failed to load sounds:', error);
+  // Build a short sine click with a linear attack/decay envelope (no pop).
+  makeClick(frequency) {
+    const sr = this.ctx.sampleRate;
+    const len = Math.floor((sr * CLICK_MS) / 1000);
+    const buffer = this.ctx.createBuffer(1, len, sr);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      const env = Math.min(i, len - i) / (len / 2);
+      data[i] = Math.sin((2 * Math.PI * frequency * i) / sr) * 0.6 * env;
     }
+    return buffer;
   }
 
-  /**
-   * Load sounds for mobile using expo-av
-   */
-  async loadMobileSounds() {
-    try {
-      // Create simple beep sounds using expo-av
-      const normalSound = new Audio.Sound();
-      const accentSound = new Audio.Sound();
-
-      // Load simple beep sounds (we'll create them programmatically)
-      await normalSound.loadAsync({
-        uri: this.createBeepDataUri(800, 100), // 800Hz, 100ms
-      });
-
-      await accentSound.loadAsync({
-        uri: this.createBeepDataUri(1200, 150), // 1200Hz, 150ms
-      });
-
-      // Set initial volume
-      await normalSound.setVolumeAsync(this.volume);
-      await accentSound.setVolumeAsync(this.volume);
-
-      this.sounds = {
-        normal: normalSound,
-        accent: accentSound,
-      };
-
-    } catch (error) {
-      console.error('Failed to load mobile sounds:', error);
-      // Fallback to simple approach
-      this.sounds = {
-        normal: null,
-        accent: null,
-      };
-    }
+  scheduleClick(time, isAccent) {
+    const src = this.ctx.createBufferSource();
+    src.buffer = isAccent ? this.accentBuffer : this.clickBuffer;
+    const gain = this.ctx.createGain();
+    gain.gain.value = this.volume;
+    src.connect(gain);
+    gain.connect(this.ctx.destination);
+    src.start(time);
   }
 
-  /**
-   * Create a simple beep sound as data URI for mobile
-   */
-  createBeepDataUri(frequency, duration) {
-    // Create a simple WAV file data URI
-    const sampleRate = 44100;
-    const samples = Math.floor(sampleRate * duration / 1000);
-    const buffer = new ArrayBuffer(44 + samples * 2);
-    const view = new DataView(buffer);
-
-    // WAV header
-    const writeString = (offset, string) => {
-      for (let i = 0; i < string.length; i++) {
-        view.setUint8(offset + i, string.charCodeAt(i));
-      }
-    };
-
-    writeString(0, 'RIFF');
-    view.setUint32(4, 36 + samples * 2, true);
-    writeString(8, 'WAVE');
-    writeString(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeString(36, 'data');
-    view.setUint32(40, samples * 2, true);
-
-    // Generate sine wave
-    for (let i = 0; i < samples; i++) {
-      const sample = Math.sin(2 * Math.PI * frequency * i / sampleRate) * 0.3;
-      const intSample = Math.max(-32768, Math.min(32767, Math.floor(sample * 32767)));
-      view.setInt16(44 + i * 2, intSample, true);
-    }
-
-    // Convert to base64
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return 'data:audio/wav;base64,' + btoa(binary);
-  }
-
-  /**
-   * Start the metronome
-   * @param {number} bpm - Beats per minute (cadence)
-   * @param {Function} onBeat - Callback function called on each beat
-   */
-  async start(bpm, onBeat) {
-    if (this.isPlaying) return;
-
-    await this.initialize();
-
-    this.bpm = bpm;
-    this.isPlaying = true;
-    this.currentBeat = 0;
-    this.onBeat = onBeat;
-
-    const interval = (60 / bpm) * 1000; // Convert BPM to milliseconds
-    this.startTime = Date.now();
-    this.nextBeatTime = this.startTime;
-
-    // Use precise timing with drift correction
-    const scheduleBeat = () => {
-      if (!this.isPlaying) return;
-
-      const now = Date.now();
-      const drift = now - this.nextBeatTime;
-
-      // Schedule next beat
-      this.currentBeat++;
-      const isAccent = false; // No accent - all beats are the same
-      
+  // Scheduler: queue every click due within SCHEDULE_AHEAD on the audio clock.
+  tick = () => {
+    if (!this.isPlaying || !this.ctx) return;
+    const secondsPerBeat = 60 / this.bpm; // reads bpm live => gapless tempo changes
+    while (this.nextNoteTime < this.ctx.currentTime + SCHEDULE_AHEAD) {
+      const beatTime = this.nextNoteTime;
+      const beatIndex = ++this.currentBeat;
+      if (this.audioEnabled) this.scheduleClick(beatTime, false);
+      // Fire the UI callback roughly when the beat is heard.
       if (this.onBeat) {
-        this.onBeat(this.currentBeat, isAccent);
+        const delayMs = Math.max(0, (beatTime - this.ctx.currentTime) * 1000);
+        setTimeout(() => {
+          if (this.isPlaying && this.onBeat) this.onBeat(beatIndex, false);
+        }, delayMs);
       }
-      
-      if (this.audioEnabled) {
-        this.playSound(isAccent);
-      }
+      this.nextNoteTime += secondsPerBeat;
+    }
+  };
 
-      // Calculate next beat time with drift correction
-      this.nextBeatTime += interval;
-      const delay = Math.max(0, this.nextBeatTime - Date.now());
-
-      // Schedule next beat
-      this.intervalId = setTimeout(scheduleBeat, delay);
-    };
-
-    // Start first beat immediately
-    scheduleBeat();
+  // NOTE: start accepts optional volume + audioEnabled because MetronomeScreen
+  // calls start(bpm, onBeat, volume, audioEnabled). Keeping these honored avoids
+  // a regression (e.g. starting muted / with the wrong initial volume).
+  async start(bpm, onBeat, volume, audioEnabled) {
+    if (this.isPlaying) return;
+    await this.initialize();
+    if (!this.ctx) return;
+    this.bpm = bpm;
+    this.onBeat = onBeat;
+    if (typeof volume === 'number') this.volume = Math.max(0, Math.min(1, volume));
+    if (typeof audioEnabled === 'boolean') this.audioEnabled = audioEnabled;
+    this.currentBeat = 0;
+    this.isPlaying = true;
+    this.nextNoteTime = this.ctx.currentTime + 0.1; // small lead-in
+    this.timerId = setInterval(this.tick, LOOKAHEAD_MS);
   }
 
-  /**
-   * Stop the metronome
-   */
   stop() {
-    if (this.intervalId) {
-      clearTimeout(this.intervalId);
-      this.intervalId = null;
+    if (this.timerId) {
+      clearInterval(this.timerId);
+      this.timerId = null;
     }
     this.isPlaying = false;
     this.currentBeat = 0;
-    this.startTime = null;
-    this.nextBeatTime = null;
   }
 
-  /**
-   * Update BPM while playing
-   * @param {number} newBpm - New beats per minute
-   * @param {Function} onBeat - Beat callback
-   */
+  // Tempo change is now trivial: scheduler reads this.bpm live, no restart, no gap.
   async updateBpm(newBpm, onBeat) {
-    // Don't update if BPM hasn't changed
-    if (newBpm === this.bpm) {
-      return;
-    }
-
+    if (newBpm === this.bpm) return;
     this.bpm = newBpm;
-    
-    if (onBeat) {
-      this.onBeat = onBeat;
-    }
-
-    // If playing, smoothly transition to new BPM without stopping
-    if (this.isPlaying) {
-      // Clear the current scheduled beat
-      if (this.intervalId) {
-        clearTimeout(this.intervalId);
-        this.intervalId = null;
-      }
-
-      // Calculate new interval
-      const interval = (60 / newBpm) * 1000;
-      
-      // Reset timing to avoid drift
-      this.nextBeatTime = Date.now() + interval;
-
-      // Schedule next beat with new BPM
-      const scheduleBeat = () => {
-        if (!this.isPlaying) return;
-
-        const now = Date.now();
-        const drift = now - this.nextBeatTime;
-
-        // Schedule next beat
-        this.currentBeat++;
-        const isAccent = false;
-        
-        if (this.onBeat) {
-          this.onBeat(this.currentBeat, isAccent);
-        }
-        
-        if (this.audioEnabled) {
-          this.playSound(isAccent);
-        }
-
-        // Calculate next beat time with drift correction
-        this.nextBeatTime += interval;
-        const delay = Math.max(0, this.nextBeatTime - Date.now());
-
-        // Schedule next beat
-        this.intervalId = setTimeout(scheduleBeat, delay);
-      };
-
-      // Start immediately with new BPM
-      scheduleBeat();
-    }
+    if (onBeat) this.onBeat = onBeat;
   }
 
-  /**
-   * Play metronome sound
-   * @param {boolean} isAccent - Whether this is an accented beat
-   */
-  async playSound(isAccent) {
-    try {
-      if (!this.isInitialized || !this.audioEnabled) return;
-
-      if (this.platform === 'web' && this.audioContext) {
-        // Web Audio API approach
-        const soundConfig = this.sounds[isAccent ? 'accent' : 'normal'];
-        this.playWebAudioBeep(soundConfig.frequency, soundConfig.duration);
-      } else if (this.platform === 'mobile') {
-        // Mobile expo-av approach
-        const sound = this.sounds[isAccent ? 'accent' : 'normal'];
-        if (sound) {
-          try {
-            await sound.setPositionAsync(0);
-            await sound.playAsync();
-          } catch (playError) {
-            // Fallback to vibration
-            this.playFallbackFeedback(isAccent);
-          }
-        } else {
-          // No sound available, use fallback
-          this.playFallbackFeedback(isAccent);
-        }
-      } else {
-        // Fallback for any other case
-        this.playFallbackFeedback(isAccent);
-      }
-    } catch (error) {
-      console.error('Error playing sound:', error);
-      this.playFallbackFeedback(isAccent);
-    }
-  }
-
-  /**
-   * Fallback feedback using vibration and console
-   */
-  playFallbackFeedback(isAccent) {
-    // Try to use device vibration as feedback
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate(isAccent ? 100 : 50);
-    }
-  }
-
-  /**
-   * Play beep using Web Audio API
-   * @param {number} frequency - Frequency in Hz
-   * @param {number} duration - Duration in seconds
-   */
-  playWebAudioBeep(frequency, duration) {
-    try {
-      if (!this.audioContext) return;
-
-      // Create oscillator
-      const oscillator = this.audioContext.createOscillator();
-      const gainNode = this.audioContext.createGain();
-
-      // Connect nodes
-      oscillator.connect(gainNode);
-      gainNode.connect(this.audioContext.destination);
-
-      // Configure oscillator
-      oscillator.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
-      oscillator.type = 'sine';
-
-      // Configure gain (volume envelope)
-      gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(this.volume * 0.3, this.audioContext.currentTime + 0.01);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + duration);
-
-      // Play sound
-      oscillator.start(this.audioContext.currentTime);
-      oscillator.stop(this.audioContext.currentTime + duration);
-    } catch (error) {
-      console.error('Error playing web audio beep:', error);
-    }
-  }
-
-  /**
-   * Set volume
-   * @param {number} volume - Volume level (0-1)
-   */
   async setVolume(volume) {
     this.volume = Math.max(0, Math.min(1, volume));
-    
-    try {
-      if (this.platform === 'mobile' && this.sounds) {
-        // Update volume for mobile sounds
-        if (this.sounds.normal && this.sounds.normal.setVolumeAsync) {
-          await this.sounds.normal.setVolumeAsync(this.volume);
-        }
-        if (this.sounds.accent && this.sounds.accent.setVolumeAsync) {
-          await this.sounds.accent.setVolumeAsync(this.volume);
-        }
-      }
-      // Web volume is handled in playWebAudioBeep method
-    } catch (error) {
-      console.error('Error setting volume:', error);
-    }
   }
 
-  /**
-   * Toggle audio on/off
-   * @param {boolean} enabled - Whether audio is enabled
-   */
   setAudioEnabled(enabled) {
     this.audioEnabled = enabled;
   }
 
-  /**
-   * Set sound type
-   * @param {string} type - Sound type (click, beep, tick, wood)
-   */
   setSoundType(type) {
-    this.soundType = type;
-    // In a full implementation, this would switch between different sound files
+    this.soundType = type; // reserved; single click sound today
   }
 
-  /**
-   * Get current state
-   * @returns {Object} Current metronome state
-   */
   getState() {
     return {
       isPlaying: this.isPlaying,
@@ -410,29 +148,16 @@ export class MetronomeService {
     };
   }
 
-  /**
-   * Cleanup resources
-   */
   async cleanup() {
     this.stop();
-    
     try {
-      if (this.platform === 'web' && this.audioContext) {
-        await this.audioContext.close();
-        this.audioContext = null;
-      } else if (this.platform === 'mobile' && this.sounds) {
-        // Cleanup mobile sounds
-        if (this.sounds.normal && this.sounds.normal.unloadAsync) {
-          await this.sounds.normal.unloadAsync();
-        }
-        if (this.sounds.accent && this.sounds.accent.unloadAsync) {
-          await this.sounds.accent.unloadAsync();
-        }
+      if (this.ctx) {
+        await this.ctx.close();
+        this.ctx = null;
       }
-    } catch (error) {
-      console.error('Error cleaning up audio:', error);
+    } catch (e) {
+      console.error('Error cleaning up audio:', e);
     }
-    
     this.isInitialized = false;
   }
 }
