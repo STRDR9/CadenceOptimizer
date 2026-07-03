@@ -4,6 +4,14 @@
 import { getRunnerProfile } from '../utils/storage';
 import TerrainDetector from './TerrainDetector';
 
+// Phase/cue advancement runs off this short wall-clock tick instead of long
+// one-shot setTimeouts. A long setTimeout gets suspended when iOS backgrounds
+// the app (screen locked / pocket) and fires late or never; a short interval
+// keeps firing while the metronome's audio session holds the app alive, and we
+// derive "what phase/cue should be active for the elapsed wall-clock time" so a
+// missed tick can never skip a transition.
+const WORKOUT_TICK_MS = 250;
+
 export class WorkoutEngine {
   constructor() {
     this.currentWorkout = null;
@@ -25,8 +33,8 @@ export class WorkoutEngine {
     };
     this.isPaused = false;
     this.phaseTimeRemaining = 0;
-    this.phaseTimer = null;
-    this.cueTimers = [];
+    this._tickTimer = null;   // single interval driving phase + cue advancement
+    this._phaseCues = [];     // [{ cue, atMs, fired }] for the current phase
   }
 
   /**
@@ -616,8 +624,60 @@ export class WorkoutEngine {
       averageCompliance: 0,
     };
 
-    // Start first phase
+    // Start first phase, then drive advancement off the wall-clock tick.
     await this.startPhase(0);
+    this._startTicking();
+  }
+
+  /**
+   * Start the wall-clock tick that advances phases and fires coaching cues.
+   * Runs on a short interval so it survives backgrounding (unlike a long
+   * per-phase setTimeout).
+   */
+  _startTicking() {
+    this._stopTicking();
+    this._tickTimer = setInterval(() => this._tick(), WORKOUT_TICK_MS);
+  }
+
+  _stopTicking() {
+    if (this._tickTimer) {
+      clearInterval(this._tickTimer);
+      this._tickTimer = null;
+    }
+  }
+
+  /**
+   * Wall-clock tick: fire any due coaching cues and advance the phase once its
+   * duration has elapsed. All decisions are derived from elapsed time, so a
+   * dropped/late tick self-corrects instead of skipping a transition.
+   */
+  _tick() {
+    if (!this.isActive || this.isPaused || !this.currentWorkout) return;
+    const phase = this.currentWorkout.phases[this.currentPhase];
+    if (!phase) return;
+
+    const phaseElapsedMs = Date.now() - this.phaseStartTime;
+
+    // Fire coaching cues whose scheduled time has passed.
+    for (const c of this._phaseCues) {
+      if (!c.fired && phaseElapsedMs >= c.atMs) {
+        c.fired = true;
+        if (this.callbacks.onCoachingCue) {
+          try {
+            this.callbacks.onCoachingCue(c.cue.message, c.cue.type);
+          } catch (error) {
+            // Coaching cue callback failed
+          }
+        }
+      }
+    }
+
+    // Advance to the next phase once this phase's duration has elapsed.
+    if (phaseElapsedMs >= phase.duration * 1000) {
+      this.stats.phasesCompleted++;
+      this.stats.cadenceChanges++;
+      this.startPhase(this.currentPhase + 1);
+    }
   }
 
   /**
@@ -664,35 +724,29 @@ export class WorkoutEngine {
       }
     }
 
-    // Schedule coaching cues
-    this.scheduleCoachingCues(phase);
+    // Build coaching-cue schedule for this phase (fired by the wall-clock tick).
+    this._buildPhaseCues(phase);
 
-    // Schedule next phase
+    // Phase advancement is handled by _tick() off elapsed wall-clock time, so it
+    // keeps working when the screen is locked / app is backgrounded.
     this.phaseTimeRemaining = phase.duration * 1000;
-    this.phaseTimer = setTimeout(() => {
-      if (this.isActive && !this.isPaused) {
-        this.stats.phasesCompleted++;
-        this.stats.cadenceChanges++;
-        this.startPhase(phaseIndex + 1);
-      }
-    }, phase.duration * 1000);
   }
 
   /**
    * Schedule coaching cues for a phase
    * @param {Object} phase - Phase definition
    */
-  scheduleCoachingCues(phase) {
+  _buildPhaseCues(phase) {
+    this._phaseCues = [];
     if (!phase.coachingCues || !this.callbacks.onCoachingCue) {
       return;
     }
 
-    this.cueTimers = [];
     phase.coachingCues.forEach((cue) => {
-      const delay = cue.timing * phase.duration * 1000;
-      
-      if (delay <= 50) {
-        // Fire immediately for timing 0 cues
+      const atMs = cue.timing * phase.duration * 1000;
+
+      if (atMs <= 50) {
+        // Fire timing≈0 cues immediately.
         if (this.isActive && !this.isPaused && this.callbacks.onCoachingCue) {
           try {
             this.callbacks.onCoachingCue(cue.message, cue.type);
@@ -701,16 +755,8 @@ export class WorkoutEngine {
           }
         }
       } else {
-        const timer = setTimeout(() => {
-          if (this.isActive && !this.isPaused && this.callbacks.onCoachingCue) {
-            try {
-              this.callbacks.onCoachingCue(cue.message, cue.type);
-            } catch (error) {
-              // Coaching cue callback failed
-            }
-          }
-        }, delay);
-        this.cueTimers.push(timer);
+        // Remaining cues fire from _tick() when elapsed time passes atMs.
+        this._phaseCues.push({ cue, atMs, fired: false });
       }
     });
   }
@@ -770,15 +816,11 @@ export class WorkoutEngine {
     if (!this.isActive || this.isPaused) return;
     this.isPaused = true;
 
-    // Calculate remaining time in current phase
+    // Record remaining time so resume can continue exactly where we left off.
     const phaseElapsed = Date.now() - this.phaseStartTime;
     const currentPhase = this.currentWorkout.phases[this.currentPhase];
     this.phaseTimeRemaining = Math.max(0, (currentPhase.duration * 1000) - phaseElapsed);
-
-    // Clear all timers
-    if (this.phaseTimer) clearTimeout(this.phaseTimer);
-    this.cueTimers.forEach(t => clearTimeout(t));
-    this.cueTimers = [];
+    // The tick keeps running but no-ops while paused (it guards on isPaused).
   }
 
   /**
@@ -787,16 +829,9 @@ export class WorkoutEngine {
   resumeWorkout() {
     if (!this.isActive || !this.isPaused) return;
     this.isPaused = false;
+    // Shift phaseStartTime forward by the paused duration so elapsed-time math
+    // (and due-cue firing) resumes seamlessly. _tick() takes it from here.
     this.phaseStartTime = Date.now() - ((this.currentWorkout.phases[this.currentPhase].duration * 1000) - this.phaseTimeRemaining);
-
-    // Reschedule phase transition with remaining time
-    this.phaseTimer = setTimeout(() => {
-      if (this.isActive && !this.isPaused) {
-        this.stats.phasesCompleted++;
-        this.stats.cadenceChanges++;
-        this.startPhase(this.currentPhase + 1);
-      }
-    }, this.phaseTimeRemaining);
   }
 
   /**
@@ -807,11 +842,10 @@ export class WorkoutEngine {
 
     this.isActive = false;
     this.isPaused = false;
-    if (this.phaseTimer) clearTimeout(this.phaseTimer);
-    this.cueTimers.forEach(t => clearTimeout(t));
-    this.cueTimers = [];
+    this._stopTicking();
+    this._phaseCues = [];
     this.stats.totalTime = Date.now() - this.workoutStartTime;
-    
+
     if (this.callbacks.onWorkoutComplete) {
       this.callbacks.onWorkoutComplete(this.currentWorkout, this.stats, false);
     }
@@ -824,9 +858,11 @@ export class WorkoutEngine {
     if (!this.isActive) return;
 
     this.isActive = false;
+    this._stopTicking();
+    this._phaseCues = [];
     this.stats.totalTime = Date.now() - this.workoutStartTime;
     this.stats.completed = true;
-    
+
     if (this.callbacks.onWorkoutComplete) {
       this.callbacks.onWorkoutComplete(this.currentWorkout, this.stats, true);
     }
