@@ -49,6 +49,9 @@ export default function MetronomeScreenSimple() {
   const [coachingEnabled, setCoachingEnabled] = useState(true);
   const [cueBanner, setCueBanner] = useState(null); // latest coaching cue, shown non-blocking on-screen
   const cueBannerTimer = useRef(null);
+  // F8: while a coaching cue speaks we duck the metronome; this holds the
+  // pre-duck volume to restore afterwards (null = not currently ducked).
+  const duckBaseVolume = useRef(null);
   const [fartlekDifficulty, setFartlekDifficulty] = useState('intermediate');
   
   // Pre-workout check-in state
@@ -153,6 +156,23 @@ export default function MetronomeScreenSimple() {
 
     // Initialize coaching voice
     CoachingVoiceService.initialize();
+
+    // F8: duck the metronome to 30% while a coaching cue speaks so voice cues
+    // aren't muddied by the click, then restore. Ducking is RELATIVE to the
+    // live volume so it respects the user's volume setting.
+    CoachingVoiceService.setDuckHandlers({
+      onStart: () => {
+        const current = MetronomeService.getState().volume;
+        duckBaseVolume.current = current;
+        MetronomeService.setVolume(current * 0.3);
+      },
+      onEnd: () => {
+        if (duckBaseVolume.current != null) {
+          MetronomeService.setVolume(duckBaseVolume.current);
+          duckBaseVolume.current = null;
+        }
+      },
+    });
 
     // Load profile units
     getRunnerProfile().then(profile => {
@@ -477,7 +497,15 @@ export default function MetronomeScreenSimple() {
   const updateVolume = (newVolume) => {
     setVolume(newVolume);
     if (isPlaying) {
-      MetronomeService.setVolume(newVolume);
+      if (duckBaseVolume.current != null) {
+        // Currently ducked under a voice cue: update the restore target so we
+        // don't stomp the user's new setting when speech ends. Keep the click
+        // ducked live at 30% of the new value.
+        duckBaseVolume.current = newVolume;
+        MetronomeService.setVolume(newVolume * 0.3);
+      } else {
+        MetronomeService.setVolume(newVolume);
+      }
     }
   };
 

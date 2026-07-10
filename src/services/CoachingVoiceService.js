@@ -12,6 +12,12 @@ export class CoachingVoiceService {
     this.isInitialized = false;
     this.speechQueue = [];
     this.isSpeaking = false;
+    // F8 ducking lifecycle. onSpeechStart fires once when a speech chain begins,
+    // onSpeechEnd once when the whole queue has drained — so a run of cues ducks
+    // the metronome once and restores once (no per-cue restore-then-reduck).
+    this.onSpeechStart = null;
+    this.onSpeechEnd = null;
+    this.duckActive = false;
     this.platform = 'mobile'; // Default to mobile since we're using expo-speech
     this.voice = null; // Will be set to best available voice
     this.preferredVoices = [
@@ -120,18 +126,23 @@ export class CoachingVoiceService {
    * @param {Object} options - Speech options
    */
   async speakNow(message, options) {
+    // Entering a speech chain (or continuing one) — duck now if not already.
+    this._beginDuck();
     this.isSpeaking = true;
 
     try {
       if (this.platform === 'mobile' && speak && typeof speak === 'function') {
         await this.speakMobile(message, options);
       } else {
-        // Fallback - just skip
+        // Fallback - nothing spoken; free this slot and let the queue drain
+        // (also ends the duck if the queue is now empty).
         this.isSpeaking = false;
+        this.processQueue();
       }
     } catch (error) {
       console.error('[FARTLEK] Error speaking message:', error);
       this.isSpeaking = false;
+      this.processQueue();
     }
   }
 
@@ -175,10 +186,46 @@ export class CoachingVoiceService {
    * Process the speech queue
    */
   processQueue() {
-    if (this.isSpeaking || this.speechQueue.length === 0) return;
+    if (this.isSpeaking) return;
+    if (this.speechQueue.length === 0) {
+      // Whole chain finished — restore the metronome.
+      this._endDuck();
+      return;
+    }
 
     const next = this.speechQueue.shift();
     this.speakNow(next.message, next.options);
+  }
+
+  /**
+   * Register metronome-ducking callbacks (F8). onStart fires when a coaching
+   * cue starts speaking; onEnd fires when speech (incl. any queued cues) fully
+   * finishes. Kept as injected handlers so this service stays decoupled from
+   * the metronome.
+   */
+  setDuckHandlers({ onStart = null, onEnd = null } = {}) {
+    this.onSpeechStart = onStart;
+    this.onSpeechEnd = onEnd;
+  }
+
+  _beginDuck() {
+    if (this.duckActive) return;
+    this.duckActive = true;
+    try {
+      if (this.onSpeechStart) this.onSpeechStart();
+    } catch (error) {
+      console.error('Duck onStart handler failed:', error);
+    }
+  }
+
+  _endDuck() {
+    if (!this.duckActive) return;
+    this.duckActive = false;
+    try {
+      if (this.onSpeechEnd) this.onSpeechEnd();
+    } catch (error) {
+      console.error('Duck onEnd handler failed:', error);
+    }
   }
 
   /**
@@ -192,10 +239,12 @@ export class CoachingVoiceService {
       
       this.isSpeaking = false;
       this.speechQueue = [];
+      this._endDuck(); // restore metronome if we were ducked
     } catch (error) {
       console.error('Error stopping speech:', error);
       this.isSpeaking = false;
       this.speechQueue = [];
+      this._endDuck();
     }
   }
 
