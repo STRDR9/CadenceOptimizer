@@ -162,10 +162,10 @@ export class TerrainDetector {
     // Adjust based on user experience level
     if (userProfile?.experience) {
       const experienceMultiplier = {
-        beginner: 0.7,    // Smaller adjustments for beginners
-        moderate: 1.0,    // Standard adjustments
-        advanced: 1.2,    // Slightly larger adjustments
-        elite: 1.3,       // Larger adjustments for elite runners
+        beginner: 0.7,       // Smaller adjustments for beginners
+        intermediate: 1.0,   // Standard adjustments
+        advanced: 1.2,       // Slightly larger adjustments
+        elite: 1.3,          // Larger adjustments for elite runners
       };
       
       baseAdjustment *= experienceMultiplier[userProfile.experience] || 1.0;

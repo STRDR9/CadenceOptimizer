@@ -90,13 +90,13 @@ export class CadenceAnalyzer {
 
   /**
    * Calculate experience level adjustment
-   * @param {string} experience - beginner, moderate, advanced, elite
+   * @param {string} experience - beginner, intermediate, advanced, elite
    * @returns {number} Adjustment in SPM
    */
   static calculateExperienceAdjustment(experience) {
     const adjustments = {
       beginner: -8,
-      moderate: -2,
+      intermediate: -2,
       advanced: 3,
       elite: 8,
     };
