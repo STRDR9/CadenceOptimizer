@@ -3,6 +3,7 @@
 
 import { getRunnerProfile } from '../utils/storage';
 import TerrainDetector from './TerrainDetector';
+import { getBaseCadence as modelBaseCadence } from './cadenceModel';
 
 // Phase/cue advancement runs off this short wall-clock tick instead of long
 // one-shot setTimeouts. A long setTimeout gets suspended when iOS backgrounds
@@ -791,22 +792,10 @@ export class WorkoutEngine {
    * @returns {number} Base cadence
    */
   getBaseCadence(profile) {
-    if (profile?.currentCadence) {
-      const cadence = parseInt(profile.currentCadence);
-      if (cadence >= 150 && cadence <= 200) {
-        return cadence;
-      }
-    }
-
-    // Default based on experience level
-    const experienceDefaults = {
-      beginner: 165,
-      intermediate: 172,
-      advanced: 178,
-      elite: 182,
-    };
-
-    return experienceDefaults[profile?.experience] || 172;
+    // F5: delegate to the single source of truth (cadenceModel). This used to
+    // have its own experience-default table {beginner:165,...} that disagreed
+    // with the Targets screen and recommendations for the same runner.
+    return modelBaseCadence(profile);
   }
 
   /**

@@ -1,5 +1,7 @@
 // Utility functions for cadence and pace calculations
 
+import { getTargetCadence } from '../services/cadenceModel';
+
 /**
  * Convert pace (min/km) to speed (km/h)
  * @param {number} paceMinutes - Pace in minutes per km
@@ -49,31 +51,12 @@ export const calculateStrideLength = (cadence, speedKmh) => {
  * @returns {number} Optimal cadence in SPM
  */
 export const calculateOptimalCadence = (targetPaceMinKm, height, experience) => {
-  // Base cadence
-  let cadence = 170;
-
-  // Adjust for pace (faster = higher cadence)
-  if (targetPaceMinKm < 4) cadence += 8;
-  else if (targetPaceMinKm < 5) cadence += 5;
-  else if (targetPaceMinKm < 6) cadence += 2;
-  else if (targetPaceMinKm > 7) cadence -= 3;
-
-  // Adjust for height
-  if (height < 160) cadence += 3;
-  else if (height < 170) cadence += 1;
-  else if (height > 190) cadence -= 3;
-  else if (height > 180) cadence -= 1;
-
-  // Adjust for experience
-  const experienceAdjustments = {
-    beginner: -5,
-    intermediate: 0,
-    advanced: 3,
-    elite: 5,
-  };
-  cadence += experienceAdjustments[experience] || 0;
-
-  return Math.round(cadence);
+  // F5: forwards to cadenceModel (single source of truth). This used to have
+  // its own base/pace/height/experience math that disagreed with the workout
+  // engine and recommendations. Callers with a full profile should prefer
+  // getTargetCadence(profile, { paceMinKm }) so age/weight/measured cadence
+  // also apply; this partial-arg form stays for backward compatibility.
+  return getTargetCadence({ height, experience }, { paceMinKm: targetPaceMinKm });
 };
 
 /**

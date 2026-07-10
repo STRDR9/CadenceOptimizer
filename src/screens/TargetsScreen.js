@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { getRunnerProfile } from '../utils/storage';
-import { 
-  parseTimeToMinutes, 
-  formatPace, 
-  calculateOptimalCadence,
+import {
+  parseTimeToMinutes,
+  formatPace,
   calculateStrideLength,
   paceToSpeed
 } from '../utils/calculations';
+import { getTargetCadence } from '../services/cadenceModel';
 
 export default function TargetsScreen() {
   const [selectedDistance, setSelectedDistance] = useState('10K');
@@ -87,10 +87,10 @@ export default function TargetsScreen() {
     const paceMinKm = totalMinutes / distanceKm;
     const paceMinMi = paceMinKm * 1.60934;
     
-    const height = profile?.height || 170;
-    const experience = profile?.experience || 'intermediate';
-    
-    const optimalCadence = calculateOptimalCadence(paceMinKm, height, experience);
+    // F5: use the full profile (height, experience, age, weight, measured
+    // cadence) via the single source of truth so this race target matches the
+    // recommendations and the workout metronome for the same runner.
+    const optimalCadence = getTargetCadence(profile, { paceMinKm });
     const speedKmh = paceToSpeed(paceMinKm);
     const strideLength = calculateStrideLength(optimalCadence, speedKmh);
     

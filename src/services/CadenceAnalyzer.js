@@ -1,6 +1,14 @@
 // Cadence Analyzer Service
 // Analyzes running data and provides personalized cadence recommendations
 
+import {
+  getCadenceBands,
+  heightAdjustment,
+  experienceAdjustment,
+  ageAdjustment,
+  weightAdjustment,
+} from './cadenceModel';
+
 export class CadenceAnalyzer {
   /**
    * Analyze cadence efficiency from running data
@@ -25,112 +33,48 @@ export class CadenceAnalyzer {
    * @returns {Object} Personalized targets
    */
   static calculatePersonalizedTargets(runnerProfile, historicalData) {
+    // F5: base cadence + effort bands now come from cadenceModel (single source
+    // of truth) so these match the Targets screen and the workout metronome.
+    const bands = getCadenceBands(runnerProfile);
+
     if (!runnerProfile) {
-      // Return default values if no profile
-      return {
-        baseCadence: 170,
-        easyPace: 165,
-        moderatePace: 170,
-        racePace: 175,
-        intervalPace: 180,
-        profile: null,
-      };
+      return { ...bands, profile: null };
     }
 
     const { height, weight, age, experience } = runnerProfile;
-    
-    // Base cadence calculation
-    let baseCadence = 170;
-    
-    // Height adjustment (-3 to +3 SPM)
-    const heightAdjustment = this.calculateHeightAdjustment(height);
-    
-    // Experience level adjustment
-    const experienceAdjustment = this.calculateExperienceAdjustment(experience);
-    
-    // Age adjustment
-    const ageAdjustment = this.calculateAgeAdjustment(age);
-    
-    // Weight adjustment (minor factor)
-    const weightAdjustment = this.calculateWeightAdjustment(weight, height);
-    
-    const finalBaseCadence = baseCadence + heightAdjustment + experienceAdjustment + ageAdjustment + weightAdjustment;
-    
+
     return {
-      baseCadence: Math.round(finalBaseCadence),
-      easyPace: Math.round(finalBaseCadence - 5),
-      moderatePace: Math.round(finalBaseCadence),
-      racePace: Math.round(finalBaseCadence + 5),
-      intervalPace: Math.round(finalBaseCadence + 10),
+      ...bands,
       profile: {
         height,
         weight,
         age,
         experience,
-        heightAdjustment,
-        experienceAdjustment,
-        ageAdjustment,
-        weightAdjustment,
+        heightAdjustment: heightAdjustment(height),
+        experienceAdjustment: experienceAdjustment(experience),
+        ageAdjustment: ageAdjustment(age),
+        weightAdjustment: weightAdjustment(weight, height),
       },
     };
   }
 
-  /**
-   * Calculate height-based cadence adjustment
-   * @param {number} height - Height in cm
-   * @returns {number} Adjustment in SPM
-   */
+  // F5: the per-factor adjustments now live in cadenceModel (single source of
+  // truth). These thin forwarders remain for backward compatibility. Note the
+  // model guards missing inputs (returns 0) where the old bodies did not.
   static calculateHeightAdjustment(height) {
-    if (height < 160) return 3;
-    if (height < 170) return 1;
-    if (height < 180) return 0;
-    if (height < 190) return -1;
-    return -3;
+    return heightAdjustment(height);
   }
 
-  /**
-   * Calculate experience level adjustment
-   * @param {string} experience - beginner, intermediate, advanced, elite
-   * @returns {number} Adjustment in SPM
-   */
   static calculateExperienceAdjustment(experience) {
-    const adjustments = {
-      beginner: -8,
-      intermediate: -2,
-      advanced: 3,
-      elite: 8,
-    };
-    return adjustments[experience] || 0;
+    return experienceAdjustment(experience);
   }
 
-  /**
-   * Calculate age-based adjustment
-   * @param {number} age - Age in years
-   * @returns {number} Adjustment in SPM
-   */
   static calculateAgeAdjustment(age) {
-    if (age < 20) return 2; // Young runners tend to have higher natural cadence
-    if (age < 30) return 0;
-    if (age < 40) return -1;
-    if (age < 50) return -2;
-    if (age < 60) return -3;
-    return -4; // Older runners may benefit from slightly lower cadence
+    return ageAdjustment(age);
   }
 
-  /**
-   * Calculate weight-based adjustment (BMI factor)
-   * @param {number} weight - Weight in kg
-   * @param {number} height - Height in cm
-   * @returns {number} Adjustment in SPM
-   */
   static calculateWeightAdjustment(weight, height) {
-    const heightM = height / 100;
-    const bmi = weight / (heightM * heightM);
-    
-    if (bmi < 18.5) return 1; // Underweight - slightly higher cadence
-    if (bmi < 25) return 0; // Normal weight
-    if (bmi < 30) return -1; // Overweight - slightly lower cadence
-    return -2; // Obese - lower cadence for joint protection
+    return weightAdjustment(weight, height);
   }
 
   /**
