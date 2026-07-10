@@ -1,7 +1,7 @@
 // Music Library Service
 // Handles music platform integration, BPM analysis, and cadence-music matching
 
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import * as MediaLibrary from 'expo-media-library';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SpotifyService from './SpotifyService';
@@ -36,14 +36,20 @@ export class MusicLibraryService {
         console.warn('Media library permission denied, Spotify-only mode');
       }
 
-      // Configure audio session
+      // Configure audio session.
+      // F3: mix-with-others (NOT do-not-mix) so music layers UNDER the metronome
+      // (react-native-audio-api) and the expo-speech voice coach instead of
+      // claiming the global AVAudioSession exclusively and interrupting them.
+      // NOTE: expo-av 16 (SDK 54) dropped the flat Audio.INTERRUPTION_MODE_* consts
+      // (they resolved to undefined) — use the InterruptionMode* enums instead.
+      // Android has no MixWithOthers; DuckOthers is its coexist-friendly default.
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         staysActiveInBackground: true,
-        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
+        interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: true,
-        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
+        interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
         playThroughEarpieceAndroid: false,
       });
 
