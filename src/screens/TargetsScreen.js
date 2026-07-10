@@ -7,7 +7,7 @@ import {
   calculateStrideLength,
   paceToSpeed
 } from '../utils/calculations';
-import { getTargetCadence } from '../services/cadenceModel';
+import { getTargetCadence, getDistanceCadenceTable } from '../services/cadenceModel';
 
 export default function TargetsScreen() {
   const [selectedDistance, setSelectedDistance] = useState('10K');
@@ -17,6 +17,25 @@ export default function TargetsScreen() {
   const [units, setUnits] = useState('metric');
 
   const distances = ['5K', '10K', 'Half Marathon', 'Marathon'];
+
+  // F6: display metadata for the auto-derived per-distance cadence table.
+  const distanceTableLabels = {
+    '5k': '5K',
+    '10k': '10K',
+    half_marathon: 'Half Marathon',
+    marathon: 'Marathon',
+  };
+  // How the cadence for a row was derived, shown so the number isn't a black box.
+  const sourceNotes = {
+    race: 'From your entered time',
+    estimate: 'Estimated from your race',
+    comfortablePace: 'From your comfortable pace',
+    base: 'General estimate — add a race time to personalize',
+  };
+
+  // F6: cadence for every race distance, derived automatically from the saved
+  // profile (entered race times -> goal pace -> cadence). No manual input.
+  const distanceTable = profile ? getDistanceCadenceTable(profile) : [];
 
   // Distance to km mapping
   const distanceToKm = {
@@ -147,6 +166,33 @@ export default function TargetsScreen() {
           <Text style={styles.calculateButtonText}>Calculate</Text>
         </TouchableOpacity>
       </View>
+
+      {distanceTable.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.title}>Your Cadence by Distance</Text>
+          <Text style={styles.description}>
+            Auto-tuned to your profile — cadence rises for shorter, faster races
+          </Text>
+          {distanceTable.map((row) => (
+            <View key={row.distanceKey} style={styles.distanceRow}>
+              <View style={styles.distanceRowLeft}>
+                <Text style={styles.distanceRowName}>
+                  {distanceTableLabels[row.distanceKey] || row.distanceKey}
+                </Text>
+                <Text style={styles.distanceRowNote}>
+                  {row.paceMinKm != null
+                    ? `Goal ~${formatPace(row.paceMinKm)} /km · ${sourceNotes[row.source] || ''}`
+                    : sourceNotes[row.source] || ''}
+                </Text>
+              </View>
+              <View style={styles.distanceRowRight}>
+                <Text style={styles.distanceRowCadence}>{row.cadence}</Text>
+                <Text style={styles.distanceRowUnit}>SPM · {row.low}-{row.high}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
 
       {result && (
         <View style={styles.resultsSection}>
@@ -281,6 +327,47 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+  },
+  distanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F8F8F8',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  distanceRowLeft: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  distanceRowName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#000000',
+    letterSpacing: 0.3,
+  },
+  distanceRowNote: {
+    fontSize: 13,
+    color: '#666666',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  distanceRowRight: {
+    alignItems: 'flex-end',
+  },
+  distanceRowCadence: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#000000',
+  },
+  distanceRowUnit: {
+    fontSize: 12,
+    color: '#666666',
+    fontWeight: '600',
+    marginTop: 2,
   },
   resultsSection: {
     padding: 20,
