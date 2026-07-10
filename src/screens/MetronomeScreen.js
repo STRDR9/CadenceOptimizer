@@ -47,6 +47,8 @@ export default function MetronomeScreenSimple() {
   // Fartlek mode states
   const [workoutStatus, setWorkoutStatus] = useState({ active: false });
   const [coachingEnabled, setCoachingEnabled] = useState(true);
+  const [cueBanner, setCueBanner] = useState(null); // latest coaching cue, shown non-blocking on-screen
+  const cueBannerTimer = useRef(null);
   const [fartlekDifficulty, setFartlekDifficulty] = useState('intermediate');
   
   // Pre-workout check-in state
@@ -111,12 +113,14 @@ export default function MetronomeScreenSimple() {
   };
 
   const handleCoachingCue = (message, type) => {
-    // Always show coaching cues when workout is active
-    // Mobile - use actual voice service with proper cue format
+    // Speak the cue (fire-and-forget; audio path is independent of the banner)
     CoachingVoiceService.speakCoachingCue({ message, type, priority: 'normal' });
-    
-    // Also show visual notification for better UX
-    Alert.alert('🎙️ Coach', message, [{ text: 'OK' }]);
+
+    // Non-blocking on-screen banner instead of a modal Alert (a blocking modal
+    // per phase change would interrupt the run). Auto-clears after a few seconds.
+    setCueBanner(message);
+    if (cueBannerTimer.current) clearTimeout(cueBannerTimer.current);
+    cueBannerTimer.current = setTimeout(() => setCueBanner(null), 6000);
   };
   
   // Update callback refs
@@ -170,6 +174,7 @@ export default function MetronomeScreenSimple() {
       CoachingVoiceService.stopSpeaking();
       stopLocationTracking();
       clearInterval(statusInterval);
+      if (cueBannerTimer.current) clearTimeout(cueBannerTimer.current);
     };
   }, []);
 
@@ -490,6 +495,13 @@ export default function MetronomeScreenSimple() {
             </Text>
           )}
         </View>
+
+        {/* Coaching cue banner — non-blocking, replaces the old modal Alert */}
+        {cueBanner && (
+          <View style={styles.cueBanner}>
+            <Text style={styles.cueBannerText}>🎙️ {cueBanner}</Text>
+          </View>
+        )}
 
         {/* Visual Beat Indicator with +/- controls inside */}
         <View style={styles.visualSection}>
@@ -853,6 +865,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#000',
     marginTop: 4,
+  },
+  cueBanner: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  cueBannerText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   visualSection: {
     alignItems: 'center',
