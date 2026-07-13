@@ -158,123 +158,113 @@ class SpotifyService {
     }
   }
 
-  // Search tracks by BPM using playlist search.
-  // Spotify deprecated /audio-features for new apps in Nov 2024, so we
-  // can't filter by actual track tempo anymore. Instead we search playlists
-  // whose names reference the target BPM, plus half-tempo matches (a 170 SPM
-  // runner can also run to 85 BPM tracks at 2 steps per beat), plus a
-  // curated running-playlist fallback so the user always gets results.
-  async searchByBPM(targetBPM, tolerance = 3, limit = 30) {
-    const allTracks = new Map(); // dedupe by track id
-    const halfBpm = Math.round(targetBPM / 2);
-
-    // BPM candidates to search for, in priority order:
-    //   exact match, ±1, ±2, half-tempo, ±3
-    const bpmCandidates = [];
-    const seen = new Set();
-    const push = (b) => {
-      if (b > 0 && !seen.has(b)) {
-        seen.add(b);
-        bpmCandidates.push(b);
-      }
+  // Pull a pool of the user's OWN tracks: top tracks (short/medium/long term)
+  // plus saved/liked tracks. Uses the user-top-read + user-library-read scopes
+  // the app already requests. Deduped by track id, normalized to our shape.
+  async gatherUserTracks(maxTracks = 200) {
+    const byId = new Map();
+    const addTrack = (t) => {
+      if (!t || !t.id || byId.has(t.id)) return;
+      byId.set(t.id, {
+        id: t.id,
+        uri: t.uri,
+        name: t.name,
+        artist: t.artists?.map(a => a.name).join(', ') || 'Unknown',
+        album: t.album?.name || '',
+        albumArt: t.album?.images?.[1]?.url || t.album?.images?.[0]?.url,
+        duration: t.duration_ms,
+      });
     };
-    push(targetBPM);
-    for (let i = 1; i <= tolerance; i++) {
-      push(targetBPM - i);
-      push(targetBPM + i);
-    }
-    push(halfBpm);
-    push(halfBpm - 1);
-    push(halfBpm + 1);
 
-    const harvestPlaylistTracks = async (playlistId, displayBpm, source) => {
+    // Top tracks: items are full track objects.
+    const topRanges = ['short_term', 'medium_term', 'long_term'];
+    for (const range of topRanges) {
+      if (byId.size >= maxTracks) break;
       try {
-        const tracks = await this.apiRequest(
-          `${SPOTIFY_CONFIG.endpoints.api}/playlists/${playlistId}/tracks?limit=20`
+        const data = await this.apiRequest(
+          `${SPOTIFY_CONFIG.endpoints.api}/me/top/tracks?limit=50&time_range=${range}`
         );
-        if (!tracks?.items) return;
-        for (const item of tracks.items) {
-          const track = item?.track;
-          if (!track || !track.id || allTracks.has(track.id)) continue;
-          allTracks.set(track.id, {
-            id: track.id,
-            uri: track.uri,
-            name: track.name,
-            artist: track.artists?.map(a => a.name).join(', ') || 'Unknown',
-            album: track.album?.name || '',
-            albumArt: track.album?.images?.[1]?.url || track.album?.images?.[0]?.url,
-            bpm: displayBpm,
-            duration: track.duration_ms,
-            matchSource: source,
-          });
-          if (allTracks.size >= limit) return;
+        for (const t of data?.items || []) addTrack(t);
+      } catch (e) {
+        // scope/endpoint may be unavailable; keep going
+      }
+    }
+
+    // Saved tracks: items are wrapped as { added_at, track }.
+    if (byId.size < maxTracks) {
+      try {
+        const data = await this.apiRequest(
+          `${SPOTIFY_CONFIG.endpoints.api}/me/tracks?limit=50`
+        );
+        for (const item of data?.items || []) addTrack(item?.track);
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    return Array.from(byId.values());
+  }
+
+  // Look up real tempo (BPM) for Spotify track ids via ReccoBeats — a free,
+  // credential-less mirror of the audio-features data Spotify cut off for new
+  // apps in Nov 2024. Returns Map<spotifyId, tempo>. ReccoBeats caps a batch
+  // at 40 ids and returns results keyed by its own id, so we map back via the
+  // Spotify track url in each result's `href`.
+  async fetchTempos(ids) {
+    const tempoById = new Map();
+    const CHUNK = 40;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const batch = ids.slice(i, i + CHUNK);
+      try {
+        const res = await fetch(
+          `https://api.reccobeats.com/v1/audio-features?ids=${batch.join(',')}`,
+          { headers: { Accept: 'application/json' } }
+        );
+        const data = await res.json();
+        for (const feat of data?.content || []) {
+          const match = /track\/([A-Za-z0-9]+)/.exec(feat?.href || '');
+          if (match && typeof feat.tempo === 'number') {
+            tempoById.set(match[1], feat.tempo);
+          }
         }
       } catch (e) {
-        // skip unreadable playlist
+        // skip this batch; partial results are still useful
       }
-    };
+    }
+    return tempoById;
+  }
 
-    // Strategy 1: BPM-named playlists (priority on exact, then near, then half-tempo)
-    for (const bpm of bpmCandidates) {
-      if (allTracks.size >= limit) break;
+  // Find cadence-matched songs from the user's OWN library. Spotify killed
+  // /audio-features, /recommendations, and editorial-playlist access for new
+  // apps (Nov 2024), so we no longer harvest strangers' BPM-named playlists.
+  // Instead: gather the user's top + saved tracks, get each one's real tempo
+  // from ReccoBeats, and keep the ones near the target — either directly, or
+  // at half tempo (a 170 SPM runner can also run to an 85 BPM track at 2 steps
+  // per beat). Returns closest matches first, in the same shape as before.
+  async searchByBPM(targetBPM, tolerance = 3, limit = 30) {
+    const tracks = await this.gatherUserTracks(200);
+    if (tracks.length === 0) return [];
 
-      const queries = [
-        `${bpm} bpm running`,
-        `${bpm} bpm workout`,
-        `${bpm} bpm`,
-      ];
-      const isHalfTempo = bpm === halfBpm || bpm === halfBpm - 1 || bpm === halfBpm + 1;
-      const displayBpm = isHalfTempo ? `${bpm}×2` : bpm;
-      const source = isHalfTempo ? 'half-tempo' : 'bpm-playlist';
+    const tempoById = await this.fetchTempos(tracks.map(t => t.id));
+    const half = targetBPM / 2;
+    const matches = [];
 
-      for (const query of queries) {
-        if (allTracks.size >= limit) break;
-        try {
-          const data = await this.apiRequest(
-            `${SPOTIFY_CONFIG.endpoints.api}/search?q=${encodeURIComponent(query)}&type=playlist&limit=5`
-          );
-          if (data.playlists?.items) {
-            for (const playlist of data.playlists.items) {
-              if (allTracks.size >= limit) break;
-              if (!playlist?.id) continue;
-              await harvestPlaylistTracks(playlist.id, displayBpm, source);
-            }
-          }
-        } catch (e) {
-          // skip query
-        }
+    for (const t of tracks) {
+      const tempo = tempoById.get(t.id);
+      if (typeof tempo !== 'number' || tempo <= 0) continue;
+
+      const directDist = Math.abs(tempo - targetBPM);
+      const halfDist = Math.abs(tempo - half);
+
+      if (directDist <= tolerance) {
+        matches.push({ ...t, bpm: Math.round(tempo), matchSource: 'exact', _dist: directDist });
+      } else if (halfDist <= tolerance) {
+        matches.push({ ...t, bpm: Math.round(tempo), matchSource: 'half-tempo', _dist: halfDist });
       }
     }
 
-    // Strategy 2: Curated running playlists fallback. Always runs if we
-    // haven't hit the limit, so the user gets *something* even if their
-    // exact BPM has no matching playlists.
-    if (allTracks.size < limit) {
-      const fallbackQueries = [
-        'running playlist',
-        'running cadence',
-        'marathon training',
-      ];
-      for (const query of fallbackQueries) {
-        if (allTracks.size >= limit) break;
-        try {
-          const data = await this.apiRequest(
-            `${SPOTIFY_CONFIG.endpoints.api}/search?q=${encodeURIComponent(query)}&type=playlist&limit=3`
-          );
-          if (data.playlists?.items) {
-            for (const playlist of data.playlists.items) {
-              if (allTracks.size >= limit) break;
-              if (!playlist?.id) continue;
-              await harvestPlaylistTracks(playlist.id, '~', 'running-curated');
-            }
-          }
-        } catch (e) {
-          // skip
-        }
-      }
-    }
-
-    return Array.from(allTracks.values()).slice(0, limit);
+    matches.sort((a, b) => a._dist - b._dist);
+    return matches.slice(0, limit).map(({ _dist, ...t }) => t);
   }
 
   // Create a playlist on the user's Spotify account

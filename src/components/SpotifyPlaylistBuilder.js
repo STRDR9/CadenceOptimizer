@@ -201,7 +201,7 @@ export default function SpotifyPlaylistBuilder({ visible, onClose, targetCadence
               <View style={styles.emptyState}>
                 <Text style={styles.emptyTitle}>No tracks found</Text>
                 <Text style={styles.emptyDesc}>
-                  Spotify doesn't have BPM-tagged playlists for {targetCadence} BPM right now. Try changing your cadence in the metronome and search again, or open Spotify directly to browse running playlists.
+                  None of your top or saved Spotify tracks land near {targetCadence} BPM. Try adjusting your cadence in the metronome and search again, or like more songs on Spotify to widen the pool.
                 </Text>
               </View>
             )}
