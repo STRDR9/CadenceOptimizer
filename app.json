@@ -62,11 +62,11 @@
     },
     "plugins": [
       "expo-location",
-      "expo-av",
       "expo-document-picker",
       "expo-file-system",
       "expo-web-browser",
-      "react-native-audio-api"
+      "react-native-audio-api",
+      "expo-audio"
     ],
     "extra": {
       "eas": {

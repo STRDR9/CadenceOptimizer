@@ -1,7 +1,7 @@
 // Music Library Service
 // Handles music platform integration, BPM analysis, and cadence-music matching
 
-import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import * as MediaLibrary from 'expo-media-library';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SpotifyService from './SpotifyService';
@@ -14,7 +14,8 @@ export class MusicLibraryService {
     this.bpmCache = new Map(); // Cache BPM analysis results
     this.currentPlaylist = [];
     this.isPlaying = false;
-    this.currentSound = null;
+    this.currentSound = null;   // expo-audio AudioPlayer
+    this._statusSub = null;     // playbackStatusUpdate subscription
     this.currentTrack = null;
     this.musicSource = 'device'; // 'device' or 'spotify'
     this.callbacks = {
@@ -36,21 +37,21 @@ export class MusicLibraryService {
         console.warn('Media library permission denied, Spotify-only mode');
       }
 
-      // Configure audio session.
+      // Configure audio session (F9: migrated expo-av -> expo-audio for SDK 54).
       // F3: mix-with-others (NOT do-not-mix) so music layers UNDER the metronome
       // (react-native-audio-api) and the expo-speech voice coach instead of
       // claiming the global AVAudioSession exclusively and interrupting them.
-      // NOTE: expo-av 16 (SDK 54) dropped the flat Audio.INTERRUPTION_MODE_* consts
-      // (they resolved to undefined) — use the InterruptionMode* enums instead.
-      // Android has no MixWithOthers; DuckOthers is its coexist-friendly default.
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        staysActiveInBackground: true,
-        interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-        playThroughEarpieceAndroid: false,
+      // expo-audio uses a flatter AudioMode: string interruption modes,
+      // playsInSilentMode / shouldPlayInBackground (replacing the iOS-suffixed
+      // expo-av keys). Android has no mixWithOthers; duckOthers is the
+      // coexist-friendly equivalent.
+      await setAudioModeAsync({
+        allowsRecording: false,
+        shouldPlayInBackground: true,
+        playsInSilentMode: true,
+        interruptionMode: 'mixWithOthers',
+        interruptionModeAndroid: 'duckOthers',
+        shouldRouteThroughEarpiece: false,
       });
 
       // Initialize Spotify service
@@ -415,20 +416,21 @@ export class MusicLibraryService {
    */
   async playTrack(track) {
     try {
-      // Stop current track if playing
-      if (this.currentSound) {
-        await this.currentSound.unloadAsync();
-      }
+      // Stop/release the current track first.
+      this._releaseCurrent();
 
-      
-      // Load and play new track
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: track.uri },
-        { shouldPlay: true, isLooping: false },
+      // expo-audio's player is imperative: create -> attach status listener ->
+      // play. createAudioPlayer loads asynchronously in native; play() starts
+      // as soon as it's ready.
+      const player = createAudioPlayer({ uri: track.uri });
+      player.loop = false;
+      this._statusSub = player.addListener(
+        'playbackStatusUpdate',
         this.onPlaybackStatusUpdate.bind(this)
       );
+      player.play();
 
-      this.currentSound = sound;
+      this.currentSound = player;
       this.currentTrack = track;
       this.isPlaying = true;
 
@@ -436,10 +438,26 @@ export class MusicLibraryService {
         this.callbacks.onTrackChange(track);
       }
 
-      return sound;
+      return player;
     } catch (error) {
       console.error(`Failed to play track ${track.title}:`, error);
       throw error;
+    }
+  }
+
+  /**
+   * Release the current player + its status listener (expo-audio).
+   * remove() stops playback and frees native resources (replaces expo-av's
+   * stopAsync + unloadAsync).
+   */
+  _releaseCurrent() {
+    if (this._statusSub) {
+      this._statusSub.remove();
+      this._statusSub = null;
+    }
+    if (this.currentSound) {
+      this.currentSound.remove();
+      this.currentSound = null;
     }
   }
 
@@ -486,12 +504,7 @@ export class MusicLibraryService {
    */
   async stop() {
     try {
-      if (this.currentSound) {
-        await this.currentSound.stopAsync();
-        await this.currentSound.unloadAsync();
-        this.currentSound = null;
-      }
-      
+      this._releaseCurrent();
       this.isPlaying = false;
       this.currentTrack = null;
     } catch (error) {
