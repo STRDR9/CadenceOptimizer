@@ -12,6 +12,16 @@ import RunnerProfileSetup from './src/screens/RunnerProfileSetup';
 import WorkoutHistoryScreen from './src/screens/WorkoutHistoryScreen';
 import analytics from './src/services/AnalyticsService';
 import CrashReportingService from './src/services/CrashReportingService';
+import {
+  useFonts,
+  Archivo_400Regular,
+  Archivo_500Medium,
+  Archivo_600SemiBold,
+  Archivo_700Bold,
+  Archivo_800ExtraBold,
+  Archivo_900Black,
+} from '@expo-google-fonts/archivo';
+import { SpaceMono_400Regular, SpaceMono_700Bold } from '@expo-google-fonts/space-mono';
 
 // Initialize crash reporting as early as possible
 CrashReportingService.initialize();
@@ -19,6 +29,17 @@ CrashReportingService.initialize();
 const Tab = createBottomTabNavigator();
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    Archivo_400Regular,
+    Archivo_500Medium,
+    Archivo_600SemiBold,
+    Archivo_700Bold,
+    Archivo_800ExtraBold,
+    Archivo_900Black,
+    SpaceMono_400Regular,
+    SpaceMono_700Bold,
+  });
+
   useEffect(() => {
     // Track app launch
     analytics.track('app_launch', {
@@ -26,6 +47,10 @@ export default function App() {
       version: '1.0.0'
     });
   }, []);
+
+  if (!fontsLoaded) {
+    return null;
+  }
 
   const handleScreenChange = (state) => {
     if (state) {
