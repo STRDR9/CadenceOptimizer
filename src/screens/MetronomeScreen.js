@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Slider from '@react-native-community/slider';
 import MetronomeService from '../services/MetronomeService';
 import LocationService from '../services/LocationService';
@@ -510,6 +511,7 @@ export default function MetronomeScreenSimple() {
   };
 
   return (
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
     <ScrollView style={styles.container}>
       <View style={styles.section}>
         {/* Cadence Display - replaces old title */}
@@ -860,10 +862,15 @@ export default function MetronomeScreenSimple() {
         targetCadence={cadence}
       />
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -877,21 +884,22 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   cadenceValue: {
-    fontFamily: 'SpaceMono_700Bold',
-    fontSize: 104,
+    fontFamily: 'Archivo_900Black',
+    fontSize: 84,
     color: '#0A0A0A',
-    lineHeight: 104,
-    letterSpacing: -4,
+    lineHeight: 88,
+    letterSpacing: -2,
+    marginTop: 4,
   },
   cadenceLabel: {
-    fontFamily: 'SpaceMono_700Bold',
+    fontFamily: 'Archivo_700Bold',
     fontSize: 13,
     color: '#6B6B6B',
-    letterSpacing: 5,
+    letterSpacing: 3,
     marginTop: 2,
   },
   terrainBadge: {
-    fontFamily: 'SpaceMono_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 11,
     color: '#6B6B6B',
     letterSpacing: 1.5,
@@ -945,7 +953,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   beatCounter: {
-    fontFamily: 'SpaceMono_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 12,
     color: '#6B6B6B',
     textAlign: 'center',
@@ -961,7 +969,7 @@ const styles = StyleSheet.create({
     borderColor: '#0A0A0A',
   },
   adjustButtonText: {
-    fontFamily: 'SpaceMono_700Bold',
+    fontFamily: 'Archivo_700Bold',
     fontSize: 18,
     color: '#0A0A0A',
   },
@@ -1004,7 +1012,7 @@ const styles = StyleSheet.create({
     borderColor: '#E5E5E5',
   },
   controlLabel: {
-    fontFamily: 'SpaceMono_700Bold',
+    fontFamily: 'Archivo_700Bold',
     fontSize: 12,
     marginBottom: 16,
     color: '#6B6B6B',
@@ -1037,7 +1045,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   volumeLabel: {
-    fontFamily: 'SpaceMono_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 13,
     color: '#6B6B6B',
     marginBottom: 8,
@@ -1073,7 +1081,7 @@ const styles = StyleSheet.create({
     borderColor: '#0A0A0A',
   },
   presetButtonText: {
-    fontFamily: 'SpaceMono_700Bold',
+    fontFamily: 'Archivo_700Bold',
     fontSize: 15,
     color: '#0A0A0A',
   },
@@ -1117,7 +1125,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   modeButtonDesc: {
-    fontFamily: 'SpaceMono_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 11,
     color: '#6B6B6B',
   },
@@ -1170,7 +1178,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   difficultyButtonDesc: {
-    fontFamily: 'SpaceMono_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 10,
     color: '#6B6B6B',
   },
@@ -1222,7 +1230,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   statusIntensity: {
-    fontFamily: 'SpaceMono_700Bold',
+    fontFamily: 'Archivo_700Bold',
     fontSize: 13,
     color: '#0A0A0A',
     marginBottom: 16,
@@ -1239,7 +1247,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A0A0A',
   },
   statusTime: {
-    fontFamily: 'SpaceMono_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 13,
     color: '#6B6B6B',
     letterSpacing: 0.5,
@@ -1291,7 +1299,7 @@ const styles = StyleSheet.create({
     borderColor: '#0A0A0A',
   },
   durationButtonText: {
-    fontFamily: 'SpaceMono_700Bold',
+    fontFamily: 'Archivo_700Bold',
     fontSize: 14,
     color: '#0A0A0A',
   },
@@ -1317,12 +1325,12 @@ const styles = StyleSheet.create({
     borderColor: '#E5E5E5',
   },
   numberButtonText: {
-    fontFamily: 'SpaceMono_700Bold',
+    fontFamily: 'Archivo_700Bold',
     fontSize: 16,
     color: '#0A0A0A',
   },
   numberDisplay: {
-    fontFamily: 'SpaceMono_700Bold',
+    fontFamily: 'Archivo_700Bold',
     fontSize: 18,
     color: '#0A0A0A',
     minWidth: 36,
@@ -1345,7 +1353,7 @@ const styles = StyleSheet.create({
     borderColor: '#E5E5E5',
   },
   cadenceDisplay: {
-    fontFamily: 'SpaceMono_700Bold',
+    fontFamily: 'Archivo_700Bold',
     fontSize: 16,
     color: '#0A0A0A',
     minWidth: 50,
@@ -1382,7 +1390,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   progressionButtonDesc: {
-    fontFamily: 'SpaceMono_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 10,
     color: '#6B6B6B',
     textAlign: 'center',
@@ -1420,7 +1428,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   musicButtonText: {
-    fontFamily: 'SpaceMono_700Bold',
+    fontFamily: 'Archivo_700Bold',
     fontSize: 14,
     color: '#0A0A0A',
     letterSpacing: 0.5,
@@ -1458,7 +1466,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   terrainToggleDesc: {
-    fontFamily: 'SpaceMono_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 12,
     color: '#6B6B6B',
     marginTop: 4,

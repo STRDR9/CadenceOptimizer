@@ -21,7 +21,6 @@ import {
   Archivo_800ExtraBold,
   Archivo_900Black,
 } from '@expo-google-fonts/archivo';
-import { SpaceMono_400Regular, SpaceMono_700Bold } from '@expo-google-fonts/space-mono';
 
 // Initialize crash reporting as early as possible
 CrashReportingService.initialize();
@@ -36,8 +35,6 @@ export default function App() {
     Archivo_700Bold,
     Archivo_800ExtraBold,
     Archivo_900Black,
-    SpaceMono_400Regular,
-    SpaceMono_700Bold,
   });
 
   useEffect(() => {
