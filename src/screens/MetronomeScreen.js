@@ -589,18 +589,6 @@ export default function MetronomeScreenSimple() {
           </TouchableOpacity>
         )}
 
-        {/* Web Compatibility Notice */}
-        {typeof window !== 'undefined' && (
-          <View style={styles.webNotice}>
-            <Text style={styles.webNoticeText}>
-              📱 <Text style={styles.webNoticeTitle}>Mobile Experience</Text>
-            </Text>
-            <Text style={styles.webNoticeDesc}>
-              Audio and voice coaching work best on mobile devices. Web version shows visual notifications.
-            </Text>
-          </View>
-        )}
-
         {/* Voice Coaching Controls */}
         <View style={styles.audioControls}>
           <Text style={styles.controlLabel}>VOICE COACHING</Text>

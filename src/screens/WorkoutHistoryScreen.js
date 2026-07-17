@@ -136,8 +136,9 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 22,
+    fontFamily: 'Archivo_900Black',
     fontWeight: '900',
-    color: '#000',
+    color: '#0A0A0A',
     marginBottom: 8,
   },
   emptyDesc: {
@@ -150,8 +151,8 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   card: {
-    backgroundColor: '#FAFAFA',
-    borderRadius: 16,
+    backgroundColor: '#F4F4F4',
+    borderRadius: 0,
     padding: 20,
     marginBottom: 12,
     borderWidth: 1,
@@ -165,17 +166,19 @@ const styles = StyleSheet.create({
   },
   cardDate: {
     fontSize: 15,
+    fontFamily: 'Archivo_700Bold',
     fontWeight: '700',
-    color: '#000',
+    color: '#0A0A0A',
   },
   cardMode: {
     fontSize: 12,
+    fontFamily: 'Archivo_800ExtraBold',
     fontWeight: '800',
     color: '#FFF',
-    backgroundColor: '#000',
+    backgroundColor: '#0A0A0A',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 0,
     letterSpacing: 0.5,
     overflow: 'hidden',
   },
@@ -188,11 +191,13 @@ const styles = StyleSheet.create({
   },
   cardStatValue: {
     fontSize: 20,
+    fontFamily: 'Archivo_900Black',
     fontWeight: '900',
-    color: '#000',
+    color: '#0A0A0A',
   },
   cardStatLabel: {
     fontSize: 11,
+    fontFamily: 'Archivo_700Bold',
     fontWeight: '700',
     color: '#999',
     letterSpacing: 0.5,
@@ -200,7 +205,7 @@ const styles = StyleSheet.create({
   },
   cardFeeling: {
     fontSize: 13,
-    color: '#666',
+    color: '#6B6B6B',
     marginTop: 12,
     textAlign: 'center',
   },
