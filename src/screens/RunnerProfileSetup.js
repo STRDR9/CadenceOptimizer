@@ -979,7 +979,7 @@ const styles = StyleSheet.create({
   stepDot: {
     width: 12,
     height: 12,
-    borderRadius: 0,
+    borderRadius: 6,
     backgroundColor: '#B0B0B0',
   },
   stepDotActive: {
@@ -989,7 +989,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A0A0A',
     width: 16,
     height: 16,
-    borderRadius: 0,
+    borderRadius: 8,
   },
   content: {
     flex: 1,
@@ -1089,15 +1089,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   experienceCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: '#FFFFFF',
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: '#E5E5E5',
     borderRadius: 0,
     padding: 16,
   },
   experienceCardActive: {
     borderColor: '#0A0A0A',
-    backgroundColor: 'rgba(0, 255, 157, 0.1)',
+    backgroundColor: '#F4F4F4',
   },
   experienceLabel: {
     fontSize: 16,
@@ -1115,7 +1115,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   experienceDescActive: {
-    color: '#1976D2',
+    color: '#6B6B6B',
   },
   raceTimeRow: {
     flexDirection: 'row',
