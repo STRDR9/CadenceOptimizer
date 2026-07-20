@@ -786,7 +786,6 @@ export default function MetronomeScreenSimple() {
             {[
               { key: 'fartlek', label: 'FARTLEK', desc: 'Speed play' },
               { key: 'interval', label: 'INTERVAL', desc: 'Work/rest' },
-              { key: 'progressive', label: 'PROGRESSIVE', desc: 'Build up' },
             ].map((modeOption) => (
               <TouchableOpacity
                 key={modeOption.key}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Platform } from 'react-native';
 import { saveRunnerProfile } from '../utils/storage';
 import { webAlert, showSuccess, showError } from '../utils/webAlert';
+import TimePickerField from '../components/TimePickerField';
 
 export default function RunnerProfileSetup({ navigation, onComplete }) {
   const [currentStep, setCurrentStep] = useState(1);
@@ -270,60 +271,6 @@ export default function RunnerProfileSetup({ navigation, onComplete }) {
     }));
   };
 
-  // Format time input to auto-add colons (MM:SS or H:MM:SS)
-  const formatTimeInput = (value) => {
-    // Remove all non-numeric characters
-    const numbers = value.replace(/[^\d]/g, '');
-    
-    if (numbers.length === 0) return '';
-    if (numbers.length <= 2) return numbers;
-    if (numbers.length <= 4) {
-      // MM:SS format
-      return `${numbers.slice(0, 2)}:${numbers.slice(2)}`;
-    }
-    // H:MM:SS format for longer times
-    const hours = numbers.slice(0, numbers.length - 4);
-    const minutes = numbers.slice(numbers.length - 4, numbers.length - 2);
-    const seconds = numbers.slice(numbers.length - 2);
-    return `${hours}:${minutes}:${seconds}`;
-  };
-
-  const handleTimeInput = (distance, value) => {
-    const formatted = formatTimeInput(value);
-    updateRaceTime(distance, formatted);
-  };
-
-  // Format pace input to auto-add /mile or /km
-  const formatPaceInput = (value) => {
-    // Remove existing unit suffixes
-    let cleanValue = value.replace(/\s*\/\s*(mile|km|mi)$/i, '').trim();
-    
-    // If empty, return empty
-    if (!cleanValue) return '';
-    
-    // Add the appropriate unit based on current setting
-    const unit = units === 'metric' ? '/km' : '/mile';
-    return `${cleanValue} ${unit}`;
-  };
-
-  const handlePaceInput = (value) => {
-    // Remove unit suffixes first to get just the time part
-    let cleanValue = value.replace(/\s*\/\s*(mile|km|mi)$/i, '').trim();
-    
-    // Apply time formatting (colons)
-    const formatted = formatTimeInput(cleanValue);
-    
-    // Store the formatted time (units will be added on blur)
-    updateProfile('comfortablePace', formatted);
-  };
-
-  const handlePaceBlur = () => {
-    // Format the pace when user finishes typing
-    if (profile.comfortablePace) {
-      const formatted = formatPaceInput(profile.comfortablePace);
-      updateProfile('comfortablePace', formatted);
-    }
-  };
 
   // Format height input to auto-add cm or in
   const formatHeightInput = (value) => {
@@ -585,67 +532,53 @@ export default function RunnerProfileSetup({ navigation, onComplete }) {
 
       {/* Recent Race Times */}
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Recent Race Times (just type numbers)</Text>
-        
-        <View style={styles.raceTimeRow}>
-          <Text style={styles.raceLabel}>5K:</Text>
-          <TextInput
-            style={styles.timeInput}
-            placeholder="2530 → 25:30"
-            value={profile.recentRaceTimes['5k']}
-            onChangeText={(value) => handleTimeInput('5k', value)}
-            keyboardType="numeric"
-          />
-        </View>
+        <Text style={styles.inputLabel}>Recent Race Times (tap to set)</Text>
 
-        <View style={styles.raceTimeRow}>
-          <Text style={styles.raceLabel}>10K:</Text>
-          <TextInput
-            style={styles.timeInput}
-            placeholder="5215 → 52:15"
-            value={profile.recentRaceTimes['10k']}
-            onChangeText={(value) => handleTimeInput('10k', value)}
-            keyboardType="numeric"
-          />
-        </View>
-
-        <View style={styles.raceTimeRow}>
-          <Text style={styles.raceLabel}>Half Marathon:</Text>
-          <TextInput
-            style={styles.timeInput}
-            placeholder="15530 → 1:55:30"
-            value={profile.recentRaceTimes['half_marathon']}
-            onChangeText={(value) => handleTimeInput('half_marathon', value)}
-            keyboardType="numeric"
-          />
-        </View>
-
-        <View style={styles.raceTimeRow}>
-          <Text style={styles.raceLabel}>Marathon:</Text>
-          <TextInput
-            style={styles.timeInput}
-            placeholder="41500 → 4:15:00"
-            value={profile.recentRaceTimes['marathon']}
-            onChangeText={(value) => handleTimeInput('marathon', value)}
-            keyboardType="numeric"
-          />
-        </View>
+        <TimePickerField
+          label="5K"
+          mode="ms"
+          title="5K time"
+          placeholder="Tap to set"
+          value={profile.recentRaceTimes['5k']}
+          onChange={(value) => updateRaceTime('5k', value)}
+        />
+        <TimePickerField
+          label="10K"
+          mode="ms"
+          title="10K time"
+          placeholder="Tap to set"
+          value={profile.recentRaceTimes['10k']}
+          onChange={(value) => updateRaceTime('10k', value)}
+        />
+        <TimePickerField
+          label="Half Marathon"
+          mode="hms"
+          title="Half marathon time"
+          placeholder="Tap to set"
+          value={profile.recentRaceTimes['half_marathon']}
+          onChange={(value) => updateRaceTime('half_marathon', value)}
+        />
+        <TimePickerField
+          label="Marathon"
+          mode="hms"
+          title="Marathon time"
+          placeholder="Tap to set"
+          value={profile.recentRaceTimes['marathon']}
+          onChange={(value) => updateRaceTime('marathon', value)}
+        />
       </View>
 
       {/* Comfortable Pace */}
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Comfortable Easy Pace</Text>
-        <TextInput
-          style={styles.input}
-          placeholder={units === 'metric' ? '600 → 6:00 /km' : '930 → 9:30 /mile'}
+        <TimePickerField
+          mode="ms"
+          title="Easy pace"
+          unit={units === 'metric' ? '/km' : '/mile'}
+          placeholder={`Tap to set ${units === 'metric' ? '/km' : '/mile'} pace`}
           value={profile.comfortablePace}
-          onChangeText={handlePaceInput}
-          onBlur={handlePaceBlur}
-          keyboardType="numeric"
+          onChange={(value) => updateProfile('comfortablePace', value)}
         />
-        <Text style={styles.inputHint}>
-          Just type numbers - we'll add colons and {units === 'metric' ? '/km' : '/mile'} automatically
-        </Text>
       </View>
 
       {/* Current Cadence */}
@@ -1116,28 +1049,6 @@ const styles = StyleSheet.create({
   },
   experienceDescActive: {
     color: '#6B6B6B',
-  },
-  raceTimeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  raceLabel: {
-    fontSize: 14,
-    fontFamily: 'Archivo_600SemiBold',
-    fontWeight: '600',
-    color: '#0A0A0A',
-    width: 100,
-  },
-  timeInput: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 0,
-    padding: 12,
-    fontSize: 14,
-    marginLeft: 12,
   },
   goalGrid: {
     flexDirection: 'row',
