@@ -1,11 +1,49 @@
 // STRDR Analytics Service
-// Simple analytics tracking for user behavior and app performance
+// User-behavior + performance tracking. Events are stored locally AND
+// transmitted to PostHog via plain fetch (no SDK / no native module).
+//
+// SETUP (one time): create a free PostHog project and paste the Project API
+// key into POSTHOG_KEY below. Until a key is set, transmission is a silent
+// no-op and events still buffer locally (getAnalyticsSummary()).
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// TODO(andy): paste PostHog Project API key here (starts with "phc_").
+const POSTHOG_KEY = '';
+const POSTHOG_HOST = 'https://us.i.posthog.com';
+const USER_ID_KEY = '@analytics_user_id';
+const OPTOUT_KEY = '@analytics_optout';
 
 class AnalyticsService {
   constructor() {
     this.events = [];
     this.sessionStart = Date.now();
-    this.userId = this.generateUserId();
+    this.userId = this.generateUserId(); // temp until initialize() loads persisted id
+    this.optedOut = false;
+  }
+
+  // Load (or create) a STABLE per-install id + opt-out pref. Call once at startup.
+  async initialize() {
+    try {
+      let id = await AsyncStorage.getItem(USER_ID_KEY);
+      if (!id) {
+        id = this.generateUserId();
+        await AsyncStorage.setItem(USER_ID_KEY, id);
+      }
+      this.userId = id;
+      this.optedOut = (await AsyncStorage.getItem(OPTOUT_KEY)) === '1';
+    } catch {
+      // keep temporary id; fail open (not opted out)
+    }
+  }
+
+  async setOptOut(value) {
+    this.optedOut = !!value;
+    try {
+      await AsyncStorage.setItem(OPTOUT_KEY, value ? '1' : '0');
+    } catch {
+      // ignore
+    }
   }
 
   generateUserId() {
@@ -26,8 +64,31 @@ class AnalyticsService {
 
     this.events.push(event);
 
-    // Store locally for now (can sync to server later)
+    // Buffer locally (getAnalyticsSummary) AND transmit to PostHog.
     this.storeEvent(event);
+    this.send(event);
+  }
+
+  // Transmit to PostHog (fire-and-forget). Never throws, never blocks the UI.
+  send(event) {
+    if (!POSTHOG_KEY || this.optedOut) return;
+    (async () => {
+      try {
+        await fetch(`${POSTHOG_HOST}/capture/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            api_key: POSTHOG_KEY,
+            event: event.event,
+            distinct_id: event.properties?.userId || this.userId,
+            properties: { ...event.properties, $lib: 'strdr-fetch' },
+            timestamp: new Date().toISOString(),
+          }),
+        });
+      } catch {
+        // Analytics must never break the app.
+      }
+    })();
   }
 
   // Store events locally

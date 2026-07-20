@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Platfo
 import { saveRunnerProfile } from '../utils/storage';
 import { webAlert, showSuccess, showError } from '../utils/webAlert';
 import TimePickerField from '../components/TimePickerField';
+import analytics from '../services/AnalyticsService';
 
 export default function RunnerProfileSetup({ navigation, onComplete }) {
   const [currentStep, setCurrentStep] = useState(1);
@@ -212,7 +213,15 @@ export default function RunnerProfileSetup({ navigation, onComplete }) {
       if (!saveResult) {
         throw new Error('Failed to save profile to storage');
       }
-      
+
+      // Funnel: did the tester actually finish setup, and how complete is it?
+      analytics.track('onboarding_completed', {
+        experience: profileData.experience,
+        raceTimesEntered: Object.values(profile.recentRaceTimes || {}).filter(Boolean).length,
+        hasComfortablePace: !!profile.comfortablePace,
+        hasCurrentCadence: !!profile.currentCadence,
+      });
+
       // Use web-compatible success message
       showSuccess(
         'Your comprehensive runner profile has been saved. All cadence recommendations will now be personalized based on your data.',

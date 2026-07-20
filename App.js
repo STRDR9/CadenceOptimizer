@@ -38,11 +38,14 @@ export default function App() {
   });
 
   useEffect(() => {
-    // Track app launch
-    analytics.track('app_launch', {
-      platform: 'mobile',
-      version: '1.0.0'
-    });
+    // Load the stable per-install id BEFORE the first event, then track launch.
+    (async () => {
+      await analytics.initialize();
+      analytics.track('app_launch', {
+        platform: 'mobile',
+        version: '1.0.0'
+      });
+    })();
   }, []);
 
   if (!fontsLoaded) {

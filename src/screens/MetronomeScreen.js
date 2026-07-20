@@ -106,7 +106,16 @@ export default function MetronomeScreenSimple() {
 
   const handleWorkoutComplete = (workout, stats, completed) => {
     setWorkoutStatus({ active: false });
-    
+
+    // Funnel payoff: did they run to completion, and for how long?
+    analytics.trackFeatureUsage('metronome', 'workout_completed', {
+      mode,
+      completed: !!completed,
+      durationSec: Math.round(stats?.duration || 0),
+      avgCadence: Math.round(stats?.averageCadence || 0),
+      phasesCompleted: stats?.phasesCompleted || 0,
+    });
+
     if (completed) {
       Alert.alert(
         'Workout Complete! 🎉',
