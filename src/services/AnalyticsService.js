@@ -8,8 +8,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// TODO(andy): paste PostHog Project API key here (starts with "phc_").
-const POSTHOG_KEY = '';
+const POSTHOG_KEY = 'phc_knowFcyv6pGN8zWwk3GVBPWFEASfCje6oTS7WXmcxyE5';
 const POSTHOG_HOST = 'https://us.i.posthog.com';
 const USER_ID_KEY = '@analytics_user_id';
 const OPTOUT_KEY = '@analytics_optout';
