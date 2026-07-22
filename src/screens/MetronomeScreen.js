@@ -22,7 +22,7 @@ export default function MetronomeScreenSimple() {
   const [volume, setVolume] = useState(0.8);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [workoutStartTime, setWorkoutStartTime] = useState(null);
-  const [mode, setMode] = useState('none'); // none, fartlek, interval, progressive
+  const [mode, setMode] = useState('none'); // none, fartlek, interval
   
   // Refs to avoid stale closures in callbacks
   const isPlayingRef = useRef(false);
@@ -75,14 +75,6 @@ export default function MetronomeScreenSimple() {
     restCadence: 160,
   });
   
-  // Progressive mode states
-  const [progressiveConfig, setProgressiveConfig] = useState({
-    duration: 1800, // 30 minutes
-    startCadence: 160,
-    endCadence: 185,
-    progressionType: 'linear',
-  });
-
   // Animation values
   const pulseAnim = useRef(new Animated.Value(1)).current;
   
@@ -398,16 +390,6 @@ export default function MetronomeScreenSimple() {
         setWorkoutStatus(WorkoutEngine.getStatus());
       }
       
-      if (mode === 'progressive') {
-        await WorkoutEngine.startProgressive({
-          duration: progressiveConfig.duration,
-          startCadence: progressiveConfig.startCadence + cadenceOffset,
-          endCadence: progressiveConfig.endCadence + cadenceOffset,
-          progressionType: progressiveConfig.progressionType,
-          coachingEnabled: coachingEnabled,
-        });
-        setWorkoutStatus(WorkoutEngine.getStatus());
-      }
     } catch (error) {
       console.error('Metronome error:', error);
     }
@@ -1354,45 +1336,6 @@ const styles = StyleSheet.create({
     color: '#0A0A0A',
     minWidth: 50,
     textAlign: 'center',
-  },
-  progressiveGrid: {
-    marginBottom: 20,
-  },
-  progressionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  progressionButton: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    flex: 1,
-    marginHorizontal: 4,
-    alignItems: 'center',
-  },
-  progressionButtonActive: {
-    backgroundColor: '#0A0A0A',
-    borderColor: '#0A0A0A',
-  },
-  progressionButtonText: {
-    fontFamily: 'Archivo_700Bold',
-    fontSize: 12,
-    color: '#0A0A0A',
-    marginBottom: 4,
-  },
-  progressionButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  progressionButtonDesc: {
-    fontFamily: 'Archivo_400Regular',
-    fontSize: 10,
-    color: '#6B6B6B',
-    textAlign: 'center',
-  },
-  progressionButtonDescActive: {
-    color: '#B0B0B0',
   },
   feelingIndicator: {
     backgroundColor: '#F4F4F4',
