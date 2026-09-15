@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { getRunnerProfile } from '../utils/storage';
+import SFIcon from '../components/SFIcon';
 import analytics from '../services/AnalyticsService';
 import { QUICK_START_CADENCE } from '../services/cadenceModel';
 
@@ -100,15 +101,12 @@ export default function HomeScreen({ navigation }) {
     >
       <View style={styles.cardHeader}>
         <View style={styles.iconContainer}>
-          <Text style={styles.cardIcon}>{icon}</Text>
+          <SFIcon name={icon} size={26} />
         </View>
         <View style={styles.cardContent}>
           <Text style={styles.cardTitle}>{title}</Text>
           <Text style={styles.cardDescription}>{description}</Text>
         </View>
-      </View>
-      <View style={styles.cardArrow}>
-        <Text style={styles.arrowText}>→</Text>
       </View>
     </TouchableOpacity>
   );
@@ -145,7 +143,6 @@ export default function HomeScreen({ navigation }) {
             activeOpacity={0.8}
           >
             <Text style={styles.setupButtonText}>SET UP YOUR PROFILE</Text>
-            <Text style={styles.setupButtonArrow}>→</Text>
           </TouchableOpacity>
 
           {/* FORGE-006: value-first entry — hear the metronome BEFORE onboarding.
@@ -165,21 +162,21 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.featurePreview}>
             <Text style={styles.featurePreviewTitle}>WHAT YOU'LL UNLOCK</Text>
             <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>🎵</Text>
+              <SFIcon name="metronome.fill" size={22} style={styles.featureIconSf} />
               <View style={styles.featureTextWrap}>
                 <Text style={styles.featureLabel}>Smart Metronome</Text>
                 <Text style={styles.featureDesc}>5 training modes with personalized cadence</Text>
               </View>
             </View>
             <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>🎯</Text>
+              <SFIcon name="target" size={22} style={styles.featureIconSf} />
               <View style={styles.featureTextWrap}>
                 <Text style={styles.featureLabel}>Race Calculator</Text>
                 <Text style={styles.featureDesc}>Cadence, pace, and stride targets for race day</Text>
               </View>
             </View>
             <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>🗣️</Text>
+              <SFIcon name="waveform.and.mic" size={22} style={styles.featureIconSf} />
               <View style={styles.featureTextWrap}>
                 <Text style={styles.featureLabel}>Voice Coaching</Text>
                 <Text style={styles.featureDesc}>Hands-free guidance during structured workouts</Text>
@@ -218,7 +215,7 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.sectionTitle}>QUICK ACTIONS</Text>
         
         <ActionCard
-          icon="📊"
+          icon="chart.bar.fill"
           title="ANALYZE DATA"
           description="Upload your running data for intelligent performance insights"
           onPress={() => {
@@ -229,7 +226,7 @@ export default function HomeScreen({ navigation }) {
         />
 
         <ActionCard
-          icon="🎵"
+          icon="metronome.fill"
           title="SMART METRONOME"
           description="Precision audio coaching with adaptive cadence technology"
           onPress={() => {
@@ -240,7 +237,7 @@ export default function HomeScreen({ navigation }) {
         />
 
         <ActionCard
-          icon="🎯"
+          icon="target"
           title="RACE OPTIMIZER"
           description="Calculate optimal cadence for peak race performance"
           onPress={() => {
@@ -253,7 +250,7 @@ export default function HomeScreen({ navigation }) {
         {/* Profile Section */}
         {!hasProfile ? (
           <ActionCard
-            icon="👤"
+            icon="person.crop.circle.fill"
             title="CREATE PROFILE"
             description="Personalize STRDR with your running metrics and goals"
             onPress={() => {
@@ -383,7 +380,7 @@ const styles = StyleSheet.create({
   // Action Card Styles
   actionCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 0,
+    borderRadius: 14,
     padding: 24,
     marginBottom: 16,
     borderWidth: 1,
@@ -572,7 +569,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A0A0A',
     marginHorizontal: 24,
     paddingVertical: 20,
-    borderRadius: 0,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16, // was 40 — quickStartButton now sits directly below (FORGE-006)
@@ -595,7 +592,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     marginHorizontal: 24,
     paddingVertical: 16,
-    borderRadius: 0,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 40,
@@ -634,7 +631,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F4F4F4',
-    borderRadius: 0,
+    borderRadius: 14,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
@@ -643,6 +640,10 @@ const styles = StyleSheet.create({
   featureIcon: {
     fontSize: 24,
     marginRight: 16,
+  },
+  featureIconSf: {
+    marginRight: 14,
+    marginTop: 2,
   },
   featureTextWrap: {
     flex: 1,
