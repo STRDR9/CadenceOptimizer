@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import SFIcon from '../components/SFIcon';
 import { useFocusEffect } from '@react-navigation/native';
 import { getWorkoutHistory, getRunnerProfile } from '../utils/storage';
 import PostWorkoutSummary from '../components/PostWorkoutSummary';
@@ -46,7 +47,7 @@ export default function WorkoutHistoryScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {workouts.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>🏃</Text>
+            <SFIcon name="figure.run" size={44} color="#B0B0B0" style={{ marginBottom: 12 }} />
             <Text style={styles.emptyTitle}>No Workouts Yet</Text>
             <Text style={styles.emptyDesc}>
               Complete a workout on the Metronome tab and it'll show up here.

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import SFIcon from '../components/SFIcon';
 import { saveRunnerProfile } from '../utils/storage';
 import { showSuccess, showError } from '../utils/webAlert';
 import TimePickerField from '../components/TimePickerField';
@@ -80,12 +81,12 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
   ];
 
   const goalOptions = [
-    { key: 'speed', label: 'Improve Speed', icon: '⚡' },
-    { key: 'endurance', label: 'Build Endurance', icon: '🏃' },
-    { key: 'injury_prevention', label: 'Prevent Injuries', icon: '🛡️' },
-    { key: 'weight_loss', label: 'Weight Management', icon: '⚖️' },
-    { key: 'general_fitness', label: 'General Fitness', icon: '💪' },
-    { key: 'race_pr', label: 'Race PR', icon: '🏆' }
+    { key: 'speed', label: 'Improve Speed', icon: 'bolt.fill' },
+    { key: 'endurance', label: 'Build Endurance', icon: 'figure.run' },
+    { key: 'injury_prevention', label: 'Prevent Injuries', icon: 'shield.fill' },
+    { key: 'weight_loss', label: 'Weight Management', icon: 'scalemass.fill' },
+    { key: 'general_fitness', label: 'General Fitness', icon: 'heart.fill' },
+    { key: 'race_pr', label: 'Race PR', icon: 'trophy.fill' }
   ];
 
   const intensityOptions = [
@@ -111,11 +112,11 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
   ];
 
   const surfaceOptions = [
-    { key: 'road', label: 'Road/Pavement', icon: '🛣️' },
-    { key: 'trail', label: 'Trails', icon: '🌲' },
-    { key: 'track', label: 'Track', icon: '🏃‍♂️' },
-    { key: 'treadmill', label: 'Treadmill', icon: '🏃‍♀️' },
-    { key: 'mixed', label: 'Mixed Surfaces', icon: '🔄' }
+    { key: 'road', label: 'Road/Pavement', icon: 'road.lanes' },
+    { key: 'trail', label: 'Trails', icon: 'tree.fill' },
+    { key: 'track', label: 'Track', icon: 'stopwatch.fill' },
+    { key: 'treadmill', label: 'Treadmill', icon: 'figure.run.treadmill' },
+    { key: 'mixed', label: 'Mixed Surfaces', icon: 'arrow.triangle.2.circlepath' }
   ];
   const handleSave = async () => {
     // Validate required fields
@@ -625,7 +626,7 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
               ]}
               onPress={() => toggleArrayValue('primaryGoals', goal.key)}
             >
-              <Text style={styles.goalIcon}>{goal.icon}</Text>
+              <SFIcon name={goal.icon} size={22} style={{ marginRight: 10 }} />
               <Text style={[
                 styles.goalLabel,
                 profile.primaryGoals.includes(goal.key) && styles.goalLabelActive
@@ -764,7 +765,7 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
               ]}
               onPress={() => toggleArrayValue('runningSurfaces', surface.key)}
             >
-              <Text style={styles.goalIcon}>{surface.icon}</Text>
+              <SFIcon name={surface.icon} size={22} style={{ marginRight: 10 }} />
               <Text style={[
                 styles.goalLabel,
                 profile.runningSurfaces.includes(surface.key) && styles.goalLabelActive
@@ -836,17 +837,19 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Runner Profile Setup</Text>
-        <Text style={styles.subtitle}>
-          Step {currentStep} of {totalSteps}
-        </Text>
+        <Text style={styles.title}>Profile Setup</Text>
         {renderStepIndicator()}
       </View>
 
+      <KeyboardAvoidingView
+        style={styles.content}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       <ScrollView 
         style={styles.content} 
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[styles.contentContainer, { paddingBottom: 48 }]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {currentStep === 1 && renderStep1()}
         {currentStep === 2 && renderStep2()}
@@ -855,6 +858,7 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
         {currentStep === 5 && renderStep5()}
         {currentStep === 6 && renderStep6()}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <View style={styles.navigation}>
         {currentStep > 1 && (
@@ -876,7 +880,7 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
             disabled={loading}
           >
             <Text style={styles.navButtonPrimaryText}>
-              {loading ? 'Creating...' : 'Complete 🎉'}
+              {loading ? 'Creating...' : 'Complete'}
             </Text>
           </TouchableOpacity>
         )}
@@ -891,18 +895,19 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#F4F4F4',
-    padding: 28,
-    paddingTop: 50,
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+    paddingTop: 48,
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5E5',
   },
   title: {
-    fontSize: 28,
+    fontSize: 17,
     fontFamily: 'Archivo_900Black',
     fontWeight: '900',
     color: '#0A0A0A',
-    marginBottom: 12,
+    marginBottom: 8,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
@@ -922,9 +927,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   stepDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
     backgroundColor: '#B0B0B0',
   },
   stepDotActive: {

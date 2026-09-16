@@ -6,6 +6,7 @@ import LocationService from '../services/LocationService';
 import TerrainDetector from '../services/TerrainDetector';
 import WorkoutEngine from '../services/WorkoutEngine';
 import CoachingVoiceService from '../services/CoachingVoiceService';
+import SFIcon from '../components/SFIcon';
 import analytics from '../services/AnalyticsService';
 import PreWorkoutCheckIn from '../components/PreWorkoutCheckIn';
 import RouteTracker from '../services/RouteTracker';
@@ -121,7 +122,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
 
     if (completed) {
       Alert.alert(
-        'Workout Complete! 🎉',
+        'Workout Complete',
         `Great job! You completed the ${workout.name} workout.\n\nStats:\n• Duration: ${Math.round(stats.duration / 60)} minutes\n• Avg Cadence: ${Math.round(stats.averageCadence)} SPM\n• Phases: ${stats.phasesCompleted}`,
         [{ text: 'OK' }]
       );
@@ -535,7 +536,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
           <Text style={styles.cadenceLabel}>SPM</Text>
           {terrainEnabled && (
             <Text style={styles.terrainBadge}>
-              {terrainData.terrain === 'uphill' ? '🔺' : terrainData.terrain === 'downhill' ? '🔻' : '➡️'} 
+              {terrainData.terrain === 'uphill' ? '▲' : terrainData.terrain === 'downhill' ? '▼' : '—'} 
               {terrainData.cadenceAdjustment !== 0 ? `${terrainData.cadenceAdjustment > 0 ? '+' : ''}${terrainData.cadenceAdjustment}` : 'FLAT'}
             </Text>
           )}
@@ -647,12 +648,11 @@ export default function MetronomeScreenSimple({ navigation, route }) {
             onPress={() => setShowMusic(true)}
             activeOpacity={0.8}
           >
-            <Text style={styles.musicButtonIcon}>🎵</Text>
+            <SFIcon name="music.note" size={22} style={{ marginRight: 12 }} />
             <View style={styles.musicButtonContent}>
               <Text style={styles.musicButtonText}>FIND MUSIC AT {cadence} BPM</Text>
               <Text style={styles.musicButtonDesc}>Build a Spotify playlist for your run</Text>
             </View>
-            <Text style={styles.musicButtonArrow}>→</Text>
           </TouchableOpacity>
         )}
 
@@ -801,8 +801,8 @@ export default function MetronomeScreenSimple({ navigation, route }) {
                 {workoutStatus.phase?.type?.toUpperCase() || 'Active'}
               </Text>
               <Text style={styles.statusIntensity}>
-                {workoutStatus.phase?.intensity === 'hard' ? '🔥 HIGH INTENSITY' :
-                 workoutStatus.phase?.intensity === 'easy' ? '😌 RECOVERY' : '⚡ MODERATE'}
+                {workoutStatus.phase?.intensity === 'hard' ? 'HIGH INTENSITY' :
+                 workoutStatus.phase?.intensity === 'easy' ? 'RECOVERY' : 'MODERATE'}
               </Text>
               <View style={styles.progressBar}>
                 <View 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Platform } from 'react-native';
+import SFIcon from '../components/SFIcon';
 import * as DocumentPicker from 'expo-document-picker';
 import { FitFileParser } from '../services/FitFileParser';
 import { CadenceAnalyzer } from '../services/CadenceAnalyzer';
@@ -195,7 +196,7 @@ export default function AnalysisScreen() {
         </Text>
         
         <View style={styles.noteCard}>
-          <Text style={styles.noteTitle}>🚀 Enhanced FIT Analysis with ZIP Support</Text>
+          <Text style={styles.noteTitle}>Enhanced FIT Analysis with ZIP Support</Text>
           <Text style={styles.noteText}>
             Upload FIT files directly or ZIP archives from Garmin Connect, Strava, Wahoo, Polar, Suunto, or any fitness device. 
             Our advanced analysis automatically extracts FIT files from ZIP archives and provides detailed cadence insights, performance metrics, and personalized recommendations.
@@ -217,14 +218,14 @@ export default function AnalysisScreen() {
 
       {error && (
         <View style={styles.errorSection}>
-          <Text style={styles.errorTitle}>⚠️ Analysis Error</Text>
+          <Text style={styles.errorTitle}>Analysis Error</Text>
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
 
       {results && (
         <View style={styles.resultsSection}>
-          <Text style={styles.resultsTitle}>📊 Analysis Results</Text>
+          <Text style={styles.resultsTitle}>Analysis Results</Text>
           <Text style={styles.fileName}>File: {results.fileName}</Text>
           
           {/* Run Summary */}
@@ -303,7 +304,7 @@ export default function AnalysisScreen() {
           {/* Lap Analysis */}
           {results.runSummary.deviceInfo && results.runSummary.deviceInfo.manufacturer && (
             <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>🏃‍♂️ Lap Analysis</Text>
+              <Text style={styles.sectionTitle}>Lap Analysis</Text>
               
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {/* Generate mock lap data for demonstration */}
@@ -344,11 +345,11 @@ export default function AnalysisScreen() {
 
           {/* Performance Insights */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>⚡ Performance Insights</Text>
+            <Text style={styles.sectionTitle}>Performance Insights</Text>
             
             <View style={styles.insightGrid}>
               <View style={styles.insightCard}>
-                <Text style={styles.insightIcon}>🎯</Text>
+                <SFIcon name="target" size={20} style={{ marginRight: 10 }} />
                 <Text style={styles.insightTitle}>Cadence Efficiency</Text>
                 <Text style={styles.insightValue}>
                   {results.cadenceZones.optimal}%
@@ -357,7 +358,7 @@ export default function AnalysisScreen() {
               </View>
               
               <View style={styles.insightCard}>
-                <Text style={styles.insightIcon}>📊</Text>
+                <SFIcon name="chart.bar.fill" size={20} style={{ marginRight: 10 }} />
                 <Text style={styles.insightTitle}>Consistency</Text>
                 <Text style={styles.insightValue}>
                   {Math.round(100 - results.runSummary.cadenceVariability)}%
@@ -366,7 +367,7 @@ export default function AnalysisScreen() {
               </View>
               
               <View style={styles.insightCard}>
-                <Text style={styles.insightIcon}>⚡</Text>
+                <SFIcon name="bolt.fill" size={20} style={{ marginRight: 10 }} />
                 <Text style={styles.insightTitle}>Pace Stability</Text>
                 <Text style={styles.insightValue}>
                   {calculatePaceStability(results.chartData?.speed || [])}%
@@ -408,7 +409,7 @@ export default function AnalysisScreen() {
 
           {/* Data Visualization Charts */}
           <View style={styles.chartsSection}>
-            <Text style={styles.chartsSectionTitle}>📊 Data Visualization</Text>
+            <Text style={styles.chartsSectionTitle}>Data Visualization</Text>
             
             {/* Cadence Over Time */}
             {results.dataQuality.hasCadence && (
