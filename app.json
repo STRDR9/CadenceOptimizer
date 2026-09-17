@@ -65,7 +65,8 @@
       "expo-web-browser",
       "react-native-audio-api",
       "expo-audio",
-      "expo-font"
+      "expo-font",
+      "expo-asset"
     ],
     "extra": {
       "eas": {
