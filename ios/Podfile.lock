@@ -1606,7 +1606,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - react-native-slider (5.2.1):
+  - react-native-slider (5.0.1):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1618,7 +1618,7 @@ PODS:
     - React-graphics
     - React-ImageManager
     - React-jsi
-    - react-native-slider/common (= 5.2.1)
+    - react-native-slider/common (= 5.0.1)
     - React-NativeModulesApple
     - React-RCTFabric
     - React-renderercss
@@ -1629,7 +1629,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - react-native-slider/common (5.2.1):
+  - react-native-slider/common (5.0.1):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2184,7 +2184,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - RNSVG (15.15.5):
+  - RNSVG (15.12.1):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2205,9 +2205,9 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - RNSVG/common (= 15.15.5)
+    - RNSVG/common (= 15.12.1)
     - Yoga
-  - RNSVG/common (15.15.5):
+  - RNSVG/common (15.12.1):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2589,7 +2589,7 @@ SPEC CHECKSUMS:
   React-microtasksnativemodule: f775db9e991c6f3b8ccbc02bfcde22770f96e23b
   react-native-maps: 9febd31278b35cd21e4fad2cf6fa708993be5dab
   react-native-safe-area-context: 37e680fc4cace3c0030ee46e8987d24f5d3bdab2
-  react-native-slider: a4b9ba69244146ee0369a3488ecb118ba80a8fda
+  react-native-slider: 8c562583722c396a3682f451f0b6e68e351ec3b9
   React-NativeModulesApple: 8969913947d5b576de4ed371a939455a8daf28aa
   React-oscompat: ce47230ed20185e91de62d8c6d139ae61763d09c
   React-perflogger: 02b010e665772c7dcb859d85d44c1bfc5ac7c0e4
@@ -2624,7 +2624,7 @@ SPEC CHECKSUMS:
   RNAudioAPI: 02d597426b8209f83f3633e040acccf8c1e2f7af
   RNCAsyncStorage: 3a4f5e2777dae1688b781a487923a08569e27fe4
   RNScreens: d8d6f1792f6e7ac12b0190d33d8d390efc0c1845
-  RNSVG: 1b2772436cb0cebfae91616c4fdd99feeef5ee6d
+  RNSVG: 31d6639663c249b7d5abc9728dde2041eb2a3c34
   Yoga: 5934998fbeaef7845dbf698f698518695ab4cd1a
 
 PODFILE CHECKSUM: 4b7f9ffc64eba9674ad04c4cd3c4161421e35a48
