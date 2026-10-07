@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MetronomeService from '../services/MetronomeService';
 import LocationService from '../services/LocationService';
 import TerrainDetector from '../services/TerrainDetector';
-import WorkoutEngine from '../services/WorkoutEngine';
+import WorkoutEngine, { workoutStatsToEventProps } from '../services/WorkoutEngine';
 import CoachingVoiceService from '../services/CoachingVoiceService';
 import SFIcon from '../components/SFIcon';
 import analytics from '../services/AnalyticsService';
@@ -111,19 +111,27 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   const handleWorkoutComplete = (workout, stats, completed) => {
     setWorkoutStatus({ active: false });
 
+    // Engine stats carry totalTime (ms) + averageCadence — shape them into the
+    // normalized durationSec/avgCadence fields (FORGE-008: stats.duration never
+    // existed, so this event logged zeros).
+    const statProps = workoutStatsToEventProps(stats);
+    if (!statProps.durationSec && workoutStartTime) {
+      // Defensive fallback: derive duration from the screen's own wall clock,
+      // the same source endWorkout uses.
+      statProps.durationSec = Math.round((Date.now() - workoutStartTime) / 1000);
+    }
+
     // Funnel payoff: did they run to completion, and for how long?
     analytics.trackFeatureUsage('metronome', 'workout_completed', {
       mode,
       completed: !!completed,
-      durationSec: Math.round(stats?.duration || 0),
-      avgCadence: Math.round(stats?.averageCadence || 0),
-      phasesCompleted: stats?.phasesCompleted || 0,
+      ...statProps,
     });
 
     if (completed) {
       Alert.alert(
         'Workout Complete',
-        `Great job! You completed the ${workout.name} workout.\n\nStats:\n• Duration: ${Math.round(stats.duration / 60)} minutes\n• Avg Cadence: ${Math.round(stats.averageCadence)} SPM\n• Phases: ${stats.phasesCompleted}`,
+        `Great job! You completed the ${workout.name} workout.\n\nStats:\n• Duration: ${Math.round(statProps.durationSec / 60)} minutes\n• Avg Cadence: ${statProps.avgCadence} SPM\n• Phases: ${statProps.phasesCompleted}`,
         [{ text: 'OK' }]
       );
     }
@@ -479,7 +487,13 @@ export default function MetronomeScreenSimple({ navigation, route }) {
     analytics.trackFeatureUsage('metronome', 'workout_stopped', {
       mode: mode,
       duration: duration,
-      cadence: cadence
+      cadence: cadence,
+      // Normalized fields shared with workout_completed (FORGE-008). The old
+      // keys above (ms + instantaneous cadence) stay for historical queries.
+      durationSec: Math.round(duration / 1000),
+      // Engine average when a workout drove cadence; for plain-metronome
+      // sessions the engine never ran, so the current setting IS the cadence.
+      avgCadence: Math.round(WorkoutEngine.getAverageCadence()) || cadence,
     });
 
     await MetronomeService.stop();

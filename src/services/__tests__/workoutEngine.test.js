@@ -8,7 +8,7 @@
 // -> expo-location) are only used in workout *generation* / terrain
 // adjustment, so they are stubbed; timing logic under test is untouched.
 
-import { WorkoutEngine } from '../WorkoutEngine';
+import { WorkoutEngine, workoutStatsToEventProps } from '../WorkoutEngine';
 
 jest.mock('../../utils/storage', () => ({
   getRunnerProfile: jest.fn(async () => ({})),
@@ -271,6 +271,77 @@ describe('WorkoutEngine timing (fake clock)', () => {
       jest.advanceTimersByTime(60000);
       expect(onPhaseChange.mock.calls.map((c) => c[1])).toEqual([0, 1]);
       expect(onWorkoutComplete).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // FORGE-008: workout_completed logged durationSec/avgCadence of 0 because
+  // the screen read stats.duration / stats.averageCadence, which the engine
+  // never produced (it reports totalTime in ms, and had no cadence average).
+  // These pin the real stats fields + the pure event-props shaper.
+  describe('completion stats (FORGE-008)', () => {
+    // 1 min @160, 2 min @175, 1 min @160 — time-weighted avg = 167.5.
+    const makeLongWorkout = () => ({
+      id: 'long_workout',
+      name: 'Long Workout',
+      type: 'interval',
+      duration: 240,
+      phases: [
+        { id: 0, cadence: 160, duration: 60, intensity: 'warmup', type: 'interval', coachingCues: [] },
+        { id: 1, cadence: 175, duration: 120, intensity: 'work', type: 'interval', coachingCues: [] },
+        { id: 2, cadence: 160, duration: 60, intensity: 'cooldown', type: 'interval', coachingCues: [] },
+      ],
+    });
+
+    test('a completed multi-minute workout yields non-zero durationSec and avgCadence', async () => {
+      await start(makeLongWorkout());
+
+      jest.advanceTimersByTime(240000); // run the full 4 minutes
+      expect(onWorkoutComplete).toHaveBeenCalledTimes(1);
+      const [, stats, completed] = onWorkoutComplete.mock.calls[0];
+      expect(completed).toBe(true);
+
+      // The engine's real fields: ms totalTime + float averageCadence.
+      expect(stats.totalTime).toBe(240000);
+      expect(stats.averageCadence).toBeCloseTo(167.5, 5);
+
+      // The shaper the screen feeds to analytics — the exact FORGE-008 bug.
+      const props = workoutStatsToEventProps(stats);
+      expect(props.durationSec).toBe(240);
+      expect(props.avgCadence).toBe(168); // Math.round(167.5)
+      expect(props.phasesCompleted).toBe(3);
+    });
+
+    test('stopping mid-workout still reports elapsed duration and the running average', async () => {
+      await start(makeLongWorkout());
+
+      jest.advanceTimersByTime(90000); // 60s @160 + 30s @175
+
+      // Running average (open segment included): (160*60 + 175*30) / 90 = 165.
+      expect(engine.getAverageCadence()).toBeCloseTo(165, 5);
+
+      engine.stopWorkout();
+      const [, stats, completed] = onWorkoutComplete.mock.calls[0];
+      expect(completed).toBe(false);
+      expect(stats.totalTime).toBe(90000);
+      expect(stats.averageCadence).toBeCloseTo(165, 5);
+      expect(workoutStatsToEventProps(stats).durationSec).toBe(90);
+
+      // Once stopped, the live average is gone — a later engine-less
+      // (plain metronome) session must not read this workout's leftovers.
+      expect(engine.getAverageCadence()).toBe(0);
+    });
+
+    test('workoutStatsToEventProps is safe on missing/legacy stats', () => {
+      expect(workoutStatsToEventProps(undefined)).toEqual({
+        durationSec: 0,
+        avgCadence: 0,
+        phasesCompleted: 0,
+      });
+      expect(workoutStatsToEventProps({})).toEqual({
+        durationSec: 0,
+        avgCadence: 0,
+        phasesCompleted: 0,
+      });
     });
   });
 });

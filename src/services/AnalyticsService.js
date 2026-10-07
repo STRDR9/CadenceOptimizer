@@ -7,6 +7,21 @@
 // no-op and events still buffer locally (getAnalyticsSummary()).
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+
+// Real runtime version — never hardcode (FORGE-008: every event reported
+// '1.0.0' while 1.0.2 was live). expoConfig.version comes from the embedded
+// app config; the build number comes from the NATIVE Info.plist
+// (Constants.platform.ios.buildNumber reads CFBundleVersion), which is what
+// EAS `autoIncrement` actually bumps on production builds — app.json carries
+// no ios.buildNumber, so expoConfig is only a fallback.
+const APP_VERSION = Constants.expoConfig?.version ?? 'unknown';
+const BUILD_NUMBER = String(
+  Constants.platform?.ios?.buildNumber ??
+  Constants.expoConfig?.ios?.buildNumber ??
+  Constants.expoConfig?.android?.versionCode ??
+  'unknown'
+);
 
 const POSTHOG_KEY = 'phc_knowFcyv6pGN8zWwk3GVBPWFEASfCje6oTS7WXmcxyE5';
 const POSTHOG_HOST = 'https://us.i.posthog.com';
@@ -80,7 +95,13 @@ class AnalyticsService {
             api_key: POSTHOG_KEY,
             event: event.event,
             distinct_id: event.properties?.userId || this.userId,
-            properties: { ...event.properties, $lib: 'strdr-fetch' },
+            properties: {
+              ...event.properties,
+              $lib: 'strdr-fetch',
+              // Attached to EVERY event so PostHog can segment by release.
+              app_version: APP_VERSION,
+              build_number: BUILD_NUMBER,
+            },
             timestamp: new Date().toISOString(),
           }),
         });

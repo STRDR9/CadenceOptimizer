@@ -39,9 +39,10 @@ export default function App() {
     // Load the stable per-install id BEFORE the first event, then track launch.
     (async () => {
       await analytics.initialize();
+      // app_version + build_number are attached to every event (incl. this
+      // one) inside AnalyticsService — no hardcoded version here (FORGE-008).
       analytics.track('app_launch', {
-        platform: 'mobile',
-        version: '1.0.0'
+        platform: 'mobile'
       });
     })();
   }, []);

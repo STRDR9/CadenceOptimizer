@@ -31,11 +31,19 @@ export class WorkoutEngine {
       phasesCompleted: 0,
       cadenceChanges: 0,
       averageCompliance: 0,
+      averageCadence: 0,
     };
     this.isPaused = false;
     this.phaseTimeRemaining = 0;
     this._tickTimer = null;   // single interval driving phase + cue advancement
     this._phaseCues = [];     // [{ cue, atMs, fired }] for the current phase
+    // Time-weighted average-cadence tracking (feeds stats.averageCadence).
+    // Pause time accrues to the current segment, matching stats.totalTime,
+    // which is also wall-clock from workoutStartTime.
+    this._currentCadence = null;      // cadence of the open segment
+    this._cadenceSegmentStart = null; // wall-clock start of the open segment
+    this._cadenceWeightedMs = 0;      // sum of (cadence * segment ms)
+    this._cadenceActiveMs = 0;        // sum of segment ms
   }
 
   /**
@@ -623,7 +631,12 @@ export class WorkoutEngine {
       phasesCompleted: 0,
       cadenceChanges: 0,
       averageCompliance: 0,
+      averageCadence: 0,
     };
+    this._currentCadence = null;
+    this._cadenceSegmentStart = null;
+    this._cadenceWeightedMs = 0;
+    this._cadenceActiveMs = 0;
 
     // Start first phase, then drive advancement off the wall-clock tick.
     await this.startPhase(0);
@@ -703,6 +716,9 @@ export class WorkoutEngine {
       adjustedCadence = Math.round(phase.cadence + terrainAdjustment);
       adjustedCadence = Math.max(150, Math.min(200, adjustedCadence));
     }
+
+    // Track the phase's cadence for the time-weighted average (stats.averageCadence).
+    this._recordCadence(adjustedCadence);
 
     // Notify callbacks
     if (this.callbacks.onPhaseChange) {
@@ -834,6 +850,7 @@ export class WorkoutEngine {
     this._stopTicking();
     this._phaseCues = [];
     this.stats.totalTime = Date.now() - this.workoutStartTime;
+    this._finalizeAverageCadence();
 
     if (this.callbacks.onWorkoutComplete) {
       this.callbacks.onWorkoutComplete(this.currentWorkout, this.stats, false);
@@ -851,10 +868,63 @@ export class WorkoutEngine {
     this._phaseCues = [];
     this.stats.totalTime = Date.now() - this.workoutStartTime;
     this.stats.completed = true;
+    this._finalizeAverageCadence();
 
     if (this.callbacks.onWorkoutComplete) {
       this.callbacks.onWorkoutComplete(this.currentWorkout, this.stats, true);
     }
+  }
+
+  /**
+   * Close the previous cadence segment (if any) and open a new one at `cadence`.
+   */
+  _recordCadence(cadence) {
+    this._closeCadenceSegment();
+    this._currentCadence = cadence;
+  }
+
+  /**
+   * Fold the open cadence segment into the weighted totals. Leaves a fresh
+   * segment start so the caller can keep tracking (or null the cadence out).
+   */
+  _closeCadenceSegment() {
+    const now = Date.now();
+    if (this._currentCadence != null && this._cadenceSegmentStart != null) {
+      const ms = now - this._cadenceSegmentStart;
+      if (ms > 0) {
+        this._cadenceWeightedMs += this._currentCadence * ms;
+        this._cadenceActiveMs += ms;
+      }
+    }
+    this._cadenceSegmentStart = now;
+  }
+
+  _finalizeAverageCadence() {
+    this._closeCadenceSegment();
+    this._currentCadence = null; // no open segment after stop/complete
+    this.stats.averageCadence =
+      this._cadenceActiveMs > 0 ? this._cadenceWeightedMs / this._cadenceActiveMs : 0;
+  }
+
+  /**
+   * Time-weighted average cadence of the ACTIVE workout, including the open
+   * segment. Returns 0 when no workout is active (plain-metronome sessions
+   * never start the engine, and a finished workout's average lives in the
+   * stats passed to onWorkoutComplete) — otherwise a later engine-less
+   * session could read the previous workout's leftover totals.
+   */
+  getAverageCadence() {
+    if (!this.isActive) return 0;
+    let weighted = this._cadenceWeightedMs;
+    let active = this._cadenceActiveMs;
+    if (this._currentCadence != null && this._cadenceSegmentStart != null) {
+      const ms = Date.now() - this._cadenceSegmentStart;
+      if (ms > 0) {
+        weighted += this._currentCadence * ms;
+        active += ms;
+      }
+    }
+    return active > 0 ? weighted / active : 0;
   }
 
   /**
@@ -915,6 +985,20 @@ export class WorkoutEngine {
       createdAt: new Date().toISOString(),
     };
   }
+}
+
+/**
+ * Shape engine stats (as passed to onWorkoutComplete) into the normalized
+ * analytics fields: seconds + rounded cadence. Pure — unit-tested. The engine
+ * reports `totalTime` in ms and `averageCadence` as a float; analytics events
+ * carry `durationSec` / `avgCadence` (FORGE-008 schema normalization).
+ */
+export function workoutStatsToEventProps(stats) {
+  return {
+    durationSec: Math.round((stats?.totalTime || 0) / 1000),
+    avgCadence: Math.round(stats?.averageCadence || 0),
+    phasesCompleted: stats?.phasesCompleted || 0,
+  };
 }
 
 // Singleton instance
