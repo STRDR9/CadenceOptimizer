@@ -1,13 +1,19 @@
 // Route Tracker Service
 // Records GPS coordinates and cadence during workouts
 // Calculates distance, pace, and per-split cadence stats
+//
+// FORGE-009: every point carries BOTH cadences — targetCadence (what the
+// metronome asked for) and measuredCadence (what the step sensor saw, null
+// when unavailable). Points saved before FORGE-009 have a single `cadence`
+// key (the target); normalizeRoutePoint() migrates them on read.
 
-class RouteTracker {
+export class RouteTracker {
   constructor() {
     this.isRecording = false;
-    this.points = []; // { latitude, longitude, altitude, timestamp, cadence }
+    this.points = []; // { latitude, longitude, altitude, timestamp, targetCadence, measuredCadence }
     this.startTime = null;
-    this.currentCadence = 0;
+    this.currentTargetCadence = 0;
+    this.currentMeasuredCadence = null;
     this.onSplitComplete = null; // callback when a split is completed
     this.splitUnit = 1000; // meters (1000 = km, 1609.34 = mile)
     this.lastSplitIndex = 0;
@@ -20,7 +26,8 @@ class RouteTracker {
     this.isRecording = true;
     this.points = [];
     this.startTime = Date.now();
-    this.currentCadence = 0;
+    this.currentTargetCadence = 0;
+    this.currentMeasuredCadence = null;
     this.onSplitComplete = onSplitComplete;
     this.splitUnit = splitUnit;
     this.lastSplitIndex = 0;
@@ -34,8 +41,15 @@ class RouteTracker {
     return this.getSummary();
   }
 
+  // TARGET cadence (the metronome setting / workout phase). Name kept from
+  // pre-FORGE-009 so existing call sites stay valid.
   updateCadence(cadence) {
-    this.currentCadence = cadence;
+    this.currentTargetCadence = cadence;
+  }
+
+  // MEASURED cadence from the step sensor (null when unavailable).
+  updateMeasuredCadence(cadence) {
+    this.currentMeasuredCadence = typeof cadence === 'number' ? cadence : null;
   }
 
   addPoint(location) {
@@ -46,7 +60,8 @@ class RouteTracker {
       longitude: location.longitude,
       altitude: location.altitude || 0,
       timestamp: location.timestamp || Date.now(),
-      cadence: this.currentCadence,
+      targetCadence: this.currentTargetCadence,
+      measuredCadence: this.currentMeasuredCadence,
     };
 
     // Calculate distance from last point
@@ -62,10 +77,7 @@ class RouteTracker {
         
         // Calculate split stats
         const splitPoints = this.points.slice(this.lastSplitIndex);
-        const cadences = splitPoints.filter(p => p.cadence > 0).map(p => p.cadence);
-        const avgCadence = cadences.length > 0
-          ? Math.round(cadences.reduce((a, b) => a + b, 0) / cadences.length)
-          : 0;
+        const avgCadence = averageOf(splitPoints, 'targetCadence');
         const splitTime = (point.timestamp - this.points[this.lastSplitIndex].timestamp) / 1000;
         const paceSeconds = distanceSinceLastSplit > 0
           ? (splitTime / distanceSinceLastSplit) * this.splitUnit
@@ -81,7 +93,8 @@ class RouteTracker {
           splitNumber: this.completedSplits,
           splitTime,
           splitPace: paceSeconds,
-          splitCadence: avgCadence,
+          splitCadence: avgCadence, // target-based (legacy name)
+          splitMeasuredCadence: averageOf(splitPoints, 'measuredCadence') || null,
           overallPace,
           totalDistance: this.cumulativeDistance,
         });
@@ -125,12 +138,14 @@ class RouteTracker {
     }));
   }
 
-  // Average cadence across all points
+  // Average TARGET cadence across all points (legacy name/semantics)
   getAverageCadence() {
-    const withCadence = this.points.filter(p => p.cadence > 0);
-    if (withCadence.length === 0) return 0;
-    const sum = withCadence.reduce((acc, p) => acc + p.cadence, 0);
-    return Math.round(sum / withCadence.length);
+    return averageOf(this.points, 'targetCadence');
+  }
+
+  // Average MEASURED cadence across all points (null when nothing measured)
+  getAverageMeasuredCadence() {
+    return averageOf(this.points, 'measuredCadence') || null;
   }
 
   // Per-split stats (per km or per mile)
@@ -148,10 +163,7 @@ class RouteTracker {
 
       if (splitDistance >= unitMeters) {
         const splitPoints = this.points.slice(splitStartIndex, i + 1);
-        const cadences = splitPoints.filter(p => p.cadence > 0).map(p => p.cadence);
-        const avgCadence = cadences.length > 0
-          ? Math.round(cadences.reduce((a, b) => a + b, 0) / cadences.length)
-          : 0;
+        const avgCadence = averageOf(splitPoints, 'targetCadence');
 
         const splitTime = (this.points[i].timestamp - this.points[splitStartIndex].timestamp) / 1000;
         const paceSecondsPerUnit = splitDistance > 0 ? (splitTime / splitDistance) * unitMeters : 0;
@@ -160,7 +172,9 @@ class RouteTracker {
           number: splitNumber,
           distance: splitDistance,
           duration: splitTime,
-          avgCadence,
+          avgCadence, // target-based (legacy name, kept for existing UI)
+          targetCadence: avgCadence,
+          measuredCadence: averageOf(splitPoints, 'measuredCadence') || null,
           pace: paceSecondsPerUnit, // seconds per km or mile
         });
 
@@ -173,10 +187,7 @@ class RouteTracker {
     // Partial last split
     if (splitDistance > 100 && splitStartIndex < this.points.length - 1) {
       const splitPoints = this.points.slice(splitStartIndex);
-      const cadences = splitPoints.filter(p => p.cadence > 0).map(p => p.cadence);
-      const avgCadence = cadences.length > 0
-        ? Math.round(cadences.reduce((a, b) => a + b, 0) / cadences.length)
-        : 0;
+      const avgCadence = averageOf(splitPoints, 'targetCadence');
       const splitTime = (this.points[this.points.length - 1].timestamp - this.points[splitStartIndex].timestamp) / 1000;
       const paceSecondsPerUnit = splitDistance > 0 ? (splitTime / splitDistance) * unitMeters : 0;
 
@@ -184,7 +195,9 @@ class RouteTracker {
         number: splitNumber,
         distance: splitDistance,
         duration: splitTime,
-        avgCadence,
+        avgCadence, // target-based (legacy name, kept for existing UI)
+        targetCadence: avgCadence,
+        measuredCadence: averageOf(splitPoints, 'measuredCadence') || null,
         pace: paceSecondsPerUnit,
         partial: true,
       });
@@ -204,12 +217,57 @@ class RouteTracker {
       route: this.getRouteCoordinates(),
       totalDistance,
       duration,
-      avgCadence: this.getAverageCadence(),
+      avgCadence: this.getAverageCadence(), // target-based (legacy)
+      avgMeasuredCadence: this.getAverageMeasuredCadence(),
       splitsKm: this.getSplits(1000),
       splitsMi: this.getSplits(1609.34),
       startTime: this.startTime,
     };
   }
+}
+
+// Mean of a positive numeric field over points; 0 when no point qualifies.
+function averageOf(points, field) {
+  const values = points
+    .map((p) => p[field])
+    .filter((v) => typeof v === 'number' && v > 0);
+  if (values.length === 0) return 0;
+  return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+}
+
+/**
+ * Pure (FORGE-009): migrate a saved route point to the current shape.
+ * Pre-009 points carry a single `cadence` key — that was the metronome
+ * TARGET, so it maps to targetCadence; measuredCadence did not exist and
+ * becomes null. Current-shape points pass through unchanged.
+ */
+export function normalizeRoutePoint(point) {
+  if (!point) return null;
+  return {
+    latitude: point.latitude,
+    longitude: point.longitude,
+    altitude: point.altitude || 0,
+    timestamp: point.timestamp,
+    targetCadence: point.targetCadence ?? point.cadence ?? 0,
+    measuredCadence: point.measuredCadence ?? null,
+  };
+}
+
+/**
+ * Pure (FORGE-009): cap a per-point series for persistence. Uniform stride,
+ * always keeping the first and last points so the route's extent survives.
+ */
+export function downsamplePoints(points, maxPoints = 2000) {
+  if (!Array.isArray(points) || points.length <= maxPoints) return points || [];
+  const stride = Math.ceil(points.length / maxPoints);
+  const out = [];
+  for (let i = 0; i < points.length; i += stride) {
+    out.push(points[i]);
+  }
+  if (out[out.length - 1] !== points[points.length - 1]) {
+    out.push(points[points.length - 1]);
+  }
+  return out;
 }
 
 export default new RouteTracker();

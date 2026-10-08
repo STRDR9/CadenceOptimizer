@@ -35,8 +35,13 @@ export class LocationService {
   /**
    * Start tracking location
    * @param {Function} callback - Called with location updates
+   * @param {Object} [options]
+   * @param {number} [options.timeInterval=5000] - ms between updates. 5 s is
+   *   the battery-friendly default for route recording (FORGE-009); terrain
+   *   adjustment passes 2000 for responsiveness, as before.
+   * @param {number} [options.distanceInterval=5] - meters between updates.
    */
-  async startTracking(callback) {
+  async startTracking(callback, { timeInterval = 5000, distanceInterval = 5 } = {}) {
     if (this.isTracking) {
       return;
     }
@@ -55,8 +60,8 @@ export class LocationService {
       this.subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
-          timeInterval: 2000, // Update every 2 seconds
-          distanceInterval: 5, // Or when moved 5 meters
+          timeInterval,
+          distanceInterval,
         },
         (location) => {
           this.handleLocationUpdate(location);
