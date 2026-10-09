@@ -95,6 +95,11 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   const bgAccumMsRef = useRef(0);
   const bgSinceRef = useRef(null);
   const workoutStartRef = useRef(null); // ms mirror of workoutStartTime for callbacks
+  // FORGE-009c: location mode/error captured AT START — reading
+  // LocationService.trackingMode after stopLocationTracking() always gave
+  // 'none' (field test #2's useless diagnostic).
+  const locationModeRef = useRef('none');
+  const locationStartErrorRef = useRef(null);
 
   // Interval mode states
   const [intervalConfig, setIntervalConfig] = useState({
@@ -139,13 +144,23 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       bgSinceRef.current = now;
     }
     const elapsed = workoutStartRef.current ? now - workoutStartRef.current : 0;
+    const c = LocationService.counters || {};
     return {
       route_points: RouteTracker.points.length,
       step_windows: series ? series.filter((b) => b.cadenceSpm != null).length : 0,
       app_state_background_pct:
         elapsed > 0 ? Math.min(100, Math.round((bgAccumMsRef.current / elapsed) * 100)) : 0,
       location_permission: await LocationService.getPermissionLevel(),
-      location_mode: LocationService.trackingMode || 'none',
+      // FORGE-009c: mode as captured at START (post-stop it reads 'none'),
+      // plus pipeline counters so the next field test says where points die.
+      location_mode: locationModeRef.current,
+      location_start_error: locationStartErrorRef.current,
+      task_deliveries: c.taskDeliveries ?? 0,
+      task_locations_received: c.taskLocationsReceived ?? 0,
+      route_points_added: c.routePointsAdded ?? 0,
+      route_points_dropped: c.routePointsDropped ?? 0,
+      callback_errors: c.callbackErrors ?? 0,
+      first_error: c.firstError ?? null,
     };
   };
 
@@ -360,11 +375,10 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   // closure's STALE start-time cadence on every GPS tick, mislabeling points
   // in interval/fartlek runs.
   const handleLocationUpdate = (location, locationHistory) => {
+    // FORGE-009c: route points are now recorded UPSTREAM in LocationService
+    // (before this callback runs), so nothing in here can cost a point.
     const analysis = TerrainDetector.processLocation(location, locationHistory);
     setTerrainData(analysis);
-
-    // Record point for route tracking
-    RouteTracker.addPoint(location);
 
     // GPS-movement hint for the step sensor's confidence flag
     StepCadenceService.reportMovement((location.speed || 0) > 0.7);
@@ -401,10 +415,16 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       await LocationService.startTracking(handleLocationUpdate, {
         timeInterval: terrainEnabled ? 2000 : 5000,
       });
+      // FORGE-009c: snapshot mode + any background-start error NOW — the
+      // service resets them on stop, which is before analytics fire.
+      locationModeRef.current = LocationService.trackingMode || 'none';
+      locationStartErrorRef.current = LocationService.lastStartError;
       setIsTrackingLocation(true);
       return true;
     } catch (error) {
       console.error('Failed to start location tracking:', error);
+      locationModeRef.current = 'none';
+      locationStartErrorRef.current = String(error?.message || error).slice(0, 200);
       if (terrainEnabled) {
         Alert.alert(
           'Location Error',

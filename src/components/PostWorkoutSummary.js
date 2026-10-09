@@ -146,6 +146,29 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
             </View>
           </View>
 
+          {/* FORGE-009c: measured vs target cadence — the number Andy runs
+              for. Minimal row until FORGE-010's full report; renders without
+              a route (no map still means real cadence data). Hidden entirely
+              for legacy workouts saved before measured cadence existed. */}
+          {(summary.measuredAvgCadence != null || summary.targetAvgCadence != null) && (
+            <View style={styles.statsGrid}>
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>{summary.measuredAvgCadence ?? '--'}</Text>
+                <Text style={styles.statLabel}>MEASURED SPM</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>{summary.targetAvgCadence ?? '--'}</Text>
+                <Text style={styles.statLabel}>TARGET SPM</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>
+                  {summary.cadenceAdherencePct != null ? `${summary.cadenceAdherencePct}%` : '--'}
+                </Text>
+                <Text style={styles.statLabel}>ON TARGET</Text>
+              </View>
+            </View>
+          )}
+
           {/* Splits Toggle */}
           {splits.length > 0 && (
             <View style={styles.splitsSection}>
