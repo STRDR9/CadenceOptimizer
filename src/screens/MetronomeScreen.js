@@ -15,7 +15,7 @@ import StepCadenceService, {
   measuredCadenceAt,
   mergeMeasuredIntoSamples,
 } from '../services/StepCadenceService';
-import PostWorkoutSummary from '../components/PostWorkoutSummary';
+import PostWorkoutSummary, { defaultUnitsFromLocale } from '../components/PostWorkoutSummary';
 import SpotifyPlaylistBuilder from '../components/SpotifyPlaylistBuilder';
 import { getRunnerProfile, saveWorkoutToHistory } from '../utils/storage';
 import { getQuickStartCadence } from '../services/cadenceModel';
@@ -68,7 +68,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   // Post-workout summary state
   const [showSummary, setShowSummary] = useState(false);
   const [workoutSummary, setWorkoutSummary] = useState(null);
-  const [profileUnits, setProfileUnits] = useState('metric');
+  const [profileUnits, setProfileUnits] = useState(defaultUnitsFromLocale()); // profile overrides below
   const [showMusic, setShowMusic] = useState(false);
   // Spotify app is in dev mode: non-allowlisted users get a 403 after OAuth.
   // When that happens we hide the entry point for the session (session-only

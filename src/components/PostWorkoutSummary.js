@@ -11,6 +11,15 @@ import {
   ScrollView,
 } from 'react-native';
 import MapView, { Polyline, Marker } from 'react-native-maps';
+import {
+  defaultUnitsFromLocale,
+  computeElevationGain,
+  computeCadenceDrift,
+  estimateSteps,
+  pickCadenceMarkers,
+} from '../utils/summaryStats';
+
+export { defaultUnitsFromLocale };
 
 function formatPace(totalSeconds) {
   if (!totalSeconds || totalSeconds <= 0) return '--:--';
@@ -29,6 +38,11 @@ function formatDuration(seconds) {
 
 export default function PostWorkoutSummary({ visible, onClose, summary, units = 'metric' }) {
   const [showSplits, setShowSplits] = useState(false);
+  const [mapExpanded, setMapExpanded] = useState(false);
+  // Units: profile setting if present, else device region (US -> miles).
+  // Tapping distance or pace flips it for this summary.
+  const [unitSystem, setUnitSystem] = useState(units || defaultUnitsFromLocale());
+  const toggleUnits = () => setUnitSystem((u) => (u === 'metric' ? 'imperial' : 'metric'));
 
   if (!summary) {
     return (
@@ -53,7 +67,7 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
 
   const hasRoute = summary.route && summary.route.length > 1;
 
-  const isMetric = units === 'metric';
+  const isMetric = unitSystem === 'metric';
   const distanceValue = summary.totalDistance > 0
     ? (isMetric ? (summary.totalDistance / 1000).toFixed(2) : (summary.totalDistance / 1609.34).toFixed(2))
     : null;
@@ -94,7 +108,12 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
         <ScrollView showsVerticalScrollIndicator={false}>
           {/* Route Map — only if GPS data exists */}
           {hasRoute && mapRegion && (
-            <View style={styles.mapContainer}>
+            <TouchableOpacity
+              style={styles.mapContainer}
+              activeOpacity={0.85}
+              onPress={() => setMapExpanded(true)}
+              accessibilityLabel="Open full-screen route map"
+            >
               <MapView
                 style={styles.map}
                 initialRegion={mapRegion}
@@ -102,6 +121,7 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
                 zoomEnabled={false}
                 rotateEnabled={false}
                 pitchEnabled={false}
+                pointerEvents="none"
               >
                 <Polyline
                   coordinates={summary.route}
@@ -119,60 +139,52 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
                   pinColor="red"
                 />
               </MapView>
-            </View>
+              <View style={styles.mapHint}>
+                <Text style={styles.mapHintText}>TAP TO EXPLORE</Text>
+              </View>
+            </TouchableOpacity>
           )}
 
           {/* Overall Stats */}
-          <View style={styles.statsGrid}>
-            {distanceValue && (
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{distanceValue}</Text>
-                <Text style={styles.statLabel}>{distanceUnit.toUpperCase()}</Text>
+          {/* 3 x 3 stat grid (Andy, 10/9): even rows/columns. '--' keeps the
+              grid square when a stat is unavailable (no GPS, legacy run). */}
+          {(() => {
+            const elevM = computeElevationGain(summary.points);
+            const elev = elevM == null ? '--' : (isMetric ? `${elevM}` : `${Math.round(elevM * 3.28084)}`);
+            const drift = computeCadenceDrift(summary.points);
+            const steps = estimateSteps(summary.measuredAvgCadence, summary.duration);
+            const legacy = summary.measuredAvgCadence == null && summary.targetAvgCadence == null;
+            const cells = [
+              { value: distanceValue || '--', label: distanceUnit.toUpperCase(), onPress: toggleUnits },
+              { value: formatDuration(summary.duration), label: 'DURATION' },
+              { value: distanceValue && avgPaceSeconds > 0 ? formatPace(avgPaceSeconds) : '--', label: `PACE ${paceUnit}`, onPress: toggleUnits },
+              { value: legacy ? (summary.avgCadence || '--') : (summary.measuredAvgCadence ?? '--'), label: legacy ? 'AVG SPM' : 'MEASURED SPM' },
+              { value: summary.targetAvgCadence ?? '--', label: 'TARGET SPM' },
+              { value: summary.cadenceAdherencePct != null ? `${summary.cadenceAdherencePct}%` : '--', label: 'ON TARGET' },
+              { value: elev, label: isMetric ? 'ELEV GAIN M' : 'ELEV GAIN FT' },
+              { value: steps != null ? steps.toLocaleString() : '--', label: 'STEPS (EST)' },
+              { value: drift == null ? '--' : `${drift > 0 ? '+' : ''}${drift}`, label: 'SPM DRIFT' },
+            ];
+            const rows = [cells.slice(0, 3), cells.slice(3, 6), cells.slice(6, 9)];
+            return (
+              <View style={styles.statsGrid}>
+                {rows.map((row, r) => (
+                  <View key={r} style={styles.statRow}>
+                    {row.map((c) => {
+                      const Cell = c.onPress ? TouchableOpacity : View;
+                      return (
+                        <Cell key={c.label} style={styles.statCard} onPress={c.onPress}>
+                          <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{c.value}</Text>
+                          <Text style={styles.statLabel} numberOfLines={1}>{c.label}</Text>
+                        </Cell>
+                      );
+                    })}
+                  </View>
+                ))}
+                <Text style={styles.unitHint}>Tap distance or pace to switch km / mi</Text>
               </View>
-            )}
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{formatDuration(summary.duration)}</Text>
-              <Text style={styles.statLabel}>DURATION</Text>
-            </View>
-            {distanceValue && avgPaceSeconds > 0 && (
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{formatPace(avgPaceSeconds)}</Text>
-                <Text style={styles.statLabel}>PACE {paceUnit}</Text>
-              </View>
-            )}
-            {/* Legacy-only: AVG SPM was the metronome target, so it just
-                duplicated TARGET SPM below (Andy, 10/8). Kept only for
-                workouts saved before measured cadence existed. */}
-            {summary.measuredAvgCadence == null && summary.targetAvgCadence == null && (
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{summary.avgCadence || '--'}</Text>
-                <Text style={styles.statLabel}>AVG SPM</Text>
-              </View>
-            )}
-          </View>
-
-          {/* FORGE-009c: measured vs target cadence — the number Andy runs
-              for. Minimal row until FORGE-010's full report; renders without
-              a route (no map still means real cadence data). Hidden entirely
-              for legacy workouts saved before measured cadence existed. */}
-          {(summary.measuredAvgCadence != null || summary.targetAvgCadence != null) && (
-            <View style={styles.statsGrid}>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{summary.measuredAvgCadence ?? '--'}</Text>
-                <Text style={styles.statLabel}>MEASURED SPM</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{summary.targetAvgCadence ?? '--'}</Text>
-                <Text style={styles.statLabel}>TARGET SPM</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>
-                  {summary.cadenceAdherencePct != null ? `${summary.cadenceAdherencePct}%` : '--'}
-                </Text>
-                <Text style={styles.statLabel}>ON TARGET</Text>
-              </View>
-            </View>
-          )}
+            );
+          })()}
 
           {/* Splits Toggle */}
           {splits.length > 0 && (
@@ -224,6 +236,32 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
           <View style={{ height: 40 }} />
         </ScrollView>
       </View>
+
+      {/* Full-screen interactive map (Andy, 10/9): pan / zoom / rotate, and
+          tap a dot to see measured vs target cadence at that point. */}
+      {hasRoute && mapRegion && (
+        <Modal visible={mapExpanded} animationType="slide" onRequestClose={() => setMapExpanded(false)}>
+          <View style={styles.fullMapContainer}>
+            <MapView style={styles.fullMap} initialRegion={mapRegion}>
+              <Polyline coordinates={summary.route} strokeColor="#000000" strokeWidth={5} />
+              <Marker coordinate={summary.route[0]} title="Start" pinColor="green" />
+              <Marker coordinate={summary.route[summary.route.length - 1]} title="Finish" pinColor="red" />
+              {pickCadenceMarkers(summary.points).map((p, i) => (
+                <Marker
+                  key={`cad-${i}`}
+                  coordinate={{ latitude: p.latitude, longitude: p.longitude }}
+                  title={p.measuredCadence ? `${p.measuredCadence} spm measured` : 'No step data here'}
+                  description={p.targetCadence ? `Target ${p.targetCadence} spm` : undefined}
+                  pinColor="#FF9500"
+                />
+              ))}
+            </MapView>
+            <TouchableOpacity style={styles.fullMapClose} onPress={() => setMapExpanded(false)}>
+              <Text style={styles.fullMapCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </Modal>
+      )}
     </Modal>
   );
 }
@@ -272,17 +310,63 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     paddingHorizontal: 12,
     marginBottom: 16,
   },
+  statRow: {
+    flexDirection: 'row',
+  },
   statCard: {
-    width: '50%',
-    padding: 8,
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+  },
+  unitHint: {
+    fontSize: 11,
+    color: '#BBB',
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  mapHint: {
+    position: 'absolute',
+    bottom: 10,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  mapHintText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  fullMapContainer: {
+    flex: 1,
+  },
+  fullMap: {
+    flex: 1,
+  },
+  fullMapClose: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullMapCloseText: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: '700',
   },
   statValue: {
-    fontSize: 32,
+    fontSize: 26,
     fontWeight: '900',
     color: '#000',
     textAlign: 'center',
