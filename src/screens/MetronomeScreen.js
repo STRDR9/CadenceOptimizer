@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Alert, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MetronomeService from '../services/MetronomeService';
 import LocationService from '../services/LocationService';
@@ -9,8 +9,13 @@ import CoachingVoiceService from '../services/CoachingVoiceService';
 import SFIcon from '../components/SFIcon';
 import analytics from '../services/AnalyticsService';
 import PreWorkoutCheckIn from '../components/PreWorkoutCheckIn';
-import RouteTracker from '../services/RouteTracker';
-import PostWorkoutSummary from '../components/PostWorkoutSummary';
+import RouteTracker, { downsamplePoints } from '../services/RouteTracker';
+import StepCadenceService, {
+  summarizeCadenceSamples,
+  measuredCadenceAt,
+  mergeMeasuredIntoSamples,
+} from '../services/StepCadenceService';
+import PostWorkoutSummary, { defaultUnitsFromLocale } from '../components/PostWorkoutSummary';
 import SpotifyPlaylistBuilder from '../components/SpotifyPlaylistBuilder';
 import { getRunnerProfile, saveWorkoutToHistory } from '../utils/storage';
 import { getQuickStartCadence } from '../services/cadenceModel';
@@ -63,7 +68,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   // Post-workout summary state
   const [showSummary, setShowSummary] = useState(false);
   const [workoutSummary, setWorkoutSummary] = useState(null);
-  const [profileUnits, setProfileUnits] = useState('metric');
+  const [profileUnits, setProfileUnits] = useState(defaultUnitsFromLocale()); // profile overrides below
   const [showMusic, setShowMusic] = useState(false);
   // Spotify app is in dev mode: non-allowlisted users get a 403 after OAuth.
   // When that happens we hide the entry point for the session (session-only
@@ -78,6 +83,24 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   const personalizePromptShownRef = useRef(false);
   const [showPersonalizePrompt, setShowPersonalizePrompt] = useState(false);
 
+  // FORGE-009: measured cadence. cadenceTargetRef mirrors the cadence state
+  // so the step-sample callback (a long-lived closure) always reads the
+  // CURRENT target. cadenceSamplesRef logs {t, target, measured} every ~2 s
+  // while playing — the source for adherence/avg analytics at workout end.
+  // stepTrackingRef: whether the pedometer actually started this workout.
+  const cadenceTargetRef = useRef(170);
+  const cadenceSamplesRef = useRef([]);
+  const stepTrackingRef = useRef(false);
+  // FORGE-009b: background-time accounting for tracking_quality analytics.
+  const bgAccumMsRef = useRef(0);
+  const bgSinceRef = useRef(null);
+  const workoutStartRef = useRef(null); // ms mirror of workoutStartTime for callbacks
+  // FORGE-009c: location mode/error captured AT START — reading
+  // LocationService.trackingMode after stopLocationTracking() always gave
+  // 'none' (field test #2's useless diagnostic).
+  const locationModeRef = useRef('none');
+  const locationStartErrorRef = useRef(null);
+
   // Interval mode states
   const [intervalConfig, setIntervalConfig] = useState({
     workDuration: 240, // 4 minutes
@@ -90,6 +113,57 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   // Animation values
   const pulseAnim = useRef(new Animated.Value(1)).current;
   
+  // Keep the target-cadence mirror current (FORGE-009)
+  useEffect(() => {
+    cadenceTargetRef.current = cadence;
+  }, [cadence]);
+
+  // FORGE-009b: accumulate time spent backgrounded/locked so workout events
+  // can report app_state_background_pct (explains a run's tracking quality).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      const now = Date.now();
+      if (next === 'active') {
+        if (bgSinceRef.current != null) {
+          bgAccumMsRef.current += now - bgSinceRef.current;
+          bgSinceRef.current = null;
+        }
+      } else if (bgSinceRef.current == null) {
+        bgSinceRef.current = now;
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  // FORGE-009b: snapshot of tracking health for workout analytics. Closes the
+  // background-time window without losing it (re-opens if still backgrounded).
+  const buildTrackingQuality = async (series) => {
+    const now = Date.now();
+    if (bgSinceRef.current != null) {
+      bgAccumMsRef.current += now - bgSinceRef.current;
+      bgSinceRef.current = now;
+    }
+    const elapsed = workoutStartRef.current ? now - workoutStartRef.current : 0;
+    const c = LocationService.counters || {};
+    return {
+      route_points: RouteTracker.points.length,
+      step_windows: series ? series.filter((b) => b.cadenceSpm != null).length : 0,
+      app_state_background_pct:
+        elapsed > 0 ? Math.min(100, Math.round((bgAccumMsRef.current / elapsed) * 100)) : 0,
+      location_permission: await LocationService.getPermissionLevel(),
+      // FORGE-009c: mode as captured at START (post-stop it reads 'none'),
+      // plus pipeline counters so the next field test says where points die.
+      location_mode: locationModeRef.current,
+      location_start_error: locationStartErrorRef.current,
+      task_deliveries: c.taskDeliveries ?? 0,
+      task_locations_received: c.taskLocationsReceived ?? 0,
+      route_points_added: c.routePointsAdded ?? 0,
+      route_points_dropped: c.routePointsDropped ?? 0,
+      callback_errors: c.callbackErrors ?? 0,
+      first_error: c.firstError ?? null,
+    };
+  };
+
   // Update ref when isPlaying changes
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -108,7 +182,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
     }
   };
 
-  const handleWorkoutComplete = (workout, stats, completed) => {
+  const handleWorkoutComplete = async (workout, stats, completed) => {
     setWorkoutStatus({ active: false });
 
     // Engine stats carry totalTime (ms) + averageCadence — shape them into the
@@ -121,11 +195,30 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       statProps.durationSec = Math.round((Date.now() - workoutStartTime) / 1000);
     }
 
+    // FORGE-009/009b: measured-vs-target summary. Live samples are garbage
+    // for any locked-screen stretch, so rebuild from CMPedometer history
+    // when available (null => keep live samples: better than nothing).
+    let samples = cadenceSamplesRef.current;
+    let series = null;
+    if (workoutStartRef.current) {
+      series = await StepCadenceService.rebuildSeries(workoutStartRef.current, Date.now());
+      if (series) samples = mergeMeasuredIntoSamples(samples, series);
+    }
+    const cadenceSummary = summarizeCadenceSamples(samples);
+    const trackingQuality = await buildTrackingQuality(series);
+
     // Funnel payoff: did they run to completion, and for how long?
     analytics.trackFeatureUsage('metronome', 'workout_completed', {
       mode,
       completed: !!completed,
       ...statProps,
+      target_avg_cadence: cadenceSummary.targetAvgCadence ?? statProps.avgCadence,
+      measured_avg_cadence: cadenceSummary.measuredAvgCadence,
+      cadence_adherence_pct: cadenceSummary.adherencePct,
+      has_route: RouteTracker.points.length > 1,
+      cadence_source: stepTrackingRef.current ? 'phone' : 'none',
+      terrain_adjust_enabled: terrainEnabled,
+      tracking_quality: trackingQuality, // FORGE-009b
     });
 
     if (completed) {
@@ -215,6 +308,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       WorkoutEngine.stopWorkout();
       CoachingVoiceService.stopSpeaking();
       stopLocationTracking();
+      StepCadenceService.stop();
       clearInterval(statusInterval);
       if (cueBannerTimer.current) clearTimeout(cueBannerTimer.current);
     };
@@ -274,39 +368,85 @@ export default function MetronomeScreenSimple({ navigation, route }) {
     }
   };
 
-  // Handle location updates for terrain detection
+  // Handle location updates for route recording + terrain detection.
+  // FORGE-009: RouteTracker's target cadence is kept current by the cadence
+  // change paths (engine callback, +/- buttons, terrain adjust below) — the
+  // old `RouteTracker.updateCadence(cadence)` here re-wrote it with this
+  // closure's STALE start-time cadence on every GPS tick, mislabeling points
+  // in interval/fartlek runs.
   const handleLocationUpdate = (location, locationHistory) => {
+    // FORGE-009c: route points are now recorded UPSTREAM in LocationService
+    // (before this callback runs), so nothing in here can cost a point.
     const analysis = TerrainDetector.processLocation(location, locationHistory);
     setTerrainData(analysis);
-    
-    // Record point for route tracking
-    RouteTracker.addPoint(location);
-    RouteTracker.updateCadence(cadence);
-    
-    // Adjust cadence if terrain is enabled and metronome is playing
-    if (terrainEnabled && isPlaying) {
+
+    // GPS-movement hint for the step sensor's confidence flag
+    StepCadenceService.reportMovement((location.speed || 0) > 0.7);
+
+    // Adjust cadence if terrain adjustment is enabled and metronome is playing
+    if (terrainEnabled && isPlayingRef.current) {
       const adjustedCadence = baseCadence + analysis.cadenceAdjustment;
       const newCadence = Math.max(140, Math.min(200, adjustedCadence));
-      
-      if (Math.abs(newCadence - cadence) >= 2) { // Only update if significant change
+      const previousCadence = cadenceTargetRef.current;
+
+      if (Math.abs(newCadence - previousCadence) >= 2) { // Only update if significant change
         setCadence(newCadence);
+        RouteTracker.updateCadence(newCadence);
         MetronomeService.updateBpm(newCadence, stableHandleBeat);
+        // FORGE-009: terrain moves the target — log every adjustment so the
+        // opt-in default can be revisited with data.
+        analytics.trackFeatureUsage('metronome', 'terrain_adjustment', {
+          direction: newCadence > previousCadence ? 'up' : 'down',
+          from: previousCadence,
+          to: newCadence,
+          grade: analysis.grade,
+        });
       }
     }
   };
 
-  // Start location tracking for terrain mode
+  // Start location tracking. FORGE-009: this now runs on EVERY workout (route
+  // recording), so a denied permission must stay quiet — no map, run goes on.
+  // Only an explicit terrain-adjustment opt-in earns the alert, since the
+  // feature the user just asked for can't work. Terrain adjustment also gets
+  // the faster 2 s updates; plain recording samples every 5 s for battery.
   const startLocationTracking = async () => {
     try {
-      await LocationService.startTracking(handleLocationUpdate);
+      await LocationService.startTracking(handleLocationUpdate, {
+        timeInterval: terrainEnabled ? 2000 : 5000,
+      });
+      // FORGE-009c: snapshot mode + any background-start error NOW — the
+      // service resets them on stop, which is before analytics fire.
+      locationModeRef.current = LocationService.trackingMode || 'none';
+      locationStartErrorRef.current = LocationService.lastStartError;
       setIsTrackingLocation(true);
+      return true;
     } catch (error) {
       console.error('Failed to start location tracking:', error);
-      Alert.alert(
-        'Location Error',
-        'Unable to access GPS. Please enable location permissions for terrain mode.',
-        [{ text: 'OK' }]
-      );
+      locationModeRef.current = 'none';
+      locationStartErrorRef.current = String(error?.message || error).slice(0, 200);
+      if (terrainEnabled) {
+        Alert.alert(
+          'Location Error',
+          'Unable to access GPS. Please enable location permissions to adjust the beat on hills.',
+          [{ text: 'OK' }]
+        );
+      }
+      return false;
+    }
+  };
+
+  // FORGE-009: step-sensor sample every ~2 s. Long-lived closure — reads only
+  // refs. Feeds RouteTracker (points carry measured cadence) and the sample
+  // log behind adherence/avg analytics. Paused time is not logged.
+  const handleCadenceSample = (sample) => {
+    RouteTracker.updateMeasuredCadence(sample.cadenceSpm);
+    if (isPlayingRef.current) {
+      cadenceSamplesRef.current.push({
+        t: sample.timestamp,
+        target: cadenceTargetRef.current,
+        measured: sample.cadenceSpm,
+      });
     }
   };
 
@@ -373,22 +513,31 @@ export default function MetronomeScreenSimple({ navigation, route }) {
         cadence: adjustedCadence,
         feeling: modifier?.key || 'skipped',
         audioEnabled: audioEnabled,
-        coachingEnabled: coachingEnabled
+        coachingEnabled: coachingEnabled,
+        terrain_adjust_enabled: terrainEnabled, // FORGE-009
       });
-      
-      setWorkoutStartTime(Date.now());
+
+      const startedAt = Date.now();
+      setWorkoutStartTime(startedAt);
+      workoutStartRef.current = startedAt; // FORGE-009b: callbacks need it pre-commit
+      bgAccumMsRef.current = 0;            // FORGE-009b: per-workout background time
+      bgSinceRef.current = AppState.currentState === 'active' ? null : startedAt;
       if (modifier) setFeelingModifier(modifier);
       setWorkoutActive(true);
-      
-      // Start terrain tracking if enabled
-      if (terrainEnabled) {
-        setBaseCadence(adjustedCadence);
-        const splitMeters = profileUnits === 'imperial' ? 1609.34 : 1000;
-        RouteTracker.start(splitMeters, handleSplitComplete);
-        RouteTracker.updateCadence(adjustedCadence);
-        await startLocationTracking();
-      }
-      
+
+      // FORGE-009: route + measured cadence are recorded on EVERY workout —
+      // no toggle. Each start() is permission-gated and fails quietly:
+      // location denied => no map; motion denied/simulator => measured null.
+      // The terrain toggle now ONLY opts into cadence ADJUSTMENT on hills.
+      setBaseCadence(adjustedCadence);
+      const splitMeters = profileUnits === 'imperial' ? 1609.34 : 1000;
+      RouteTracker.start(splitMeters, handleSplitComplete);
+      RouteTracker.updateCadence(adjustedCadence);
+      RouteTracker.updateMeasuredCadence(null);
+      cadenceSamplesRef.current = [];
+      await startLocationTracking();
+      stepTrackingRef.current = await StepCadenceService.start(handleCadenceSample);
+
       setIsPlaying(true);
       setCadence(adjustedCadence);
       await MetronomeService.start(adjustedCadence, stableHandleBeat, volume, audioEnabled);
@@ -482,8 +631,31 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   };
 
   const endWorkout = async () => {
-    const duration = Date.now() - workoutStartTime;
-    
+    const endedAt = Date.now();
+    const duration = endedAt - workoutStartTime;
+
+    // FORGE-009: close out recording first so the analytics below see the
+    // final route + cadence samples. Recording runs on every workout now.
+    RouteTracker.stop();
+    stopLocationTracking();
+    StepCadenceService.stop();
+
+    // FORGE-009b: rebuild measured cadence from CMPedometer HISTORY — the
+    // phone counted steps the whole run even while locked, when our live
+    // callbacks were throttled into garbage (field test: 28 spm on a ~115
+    // spm walk). History overwrites live values in both the sample log and
+    // the recorded route points; null (no history / permission) keeps live.
+    let samples = cadenceSamplesRef.current;
+    const series = await StepCadenceService.rebuildSeries(workoutStartTime, endedAt);
+    if (series) {
+      samples = mergeMeasuredIntoSamples(samples, series);
+      RouteTracker.reattachMeasured((t) => measuredCadenceAt(series, t));
+    }
+    const routeSummary = RouteTracker.getSummary();
+    const cadenceSummary = summarizeCadenceSamples(samples);
+    const trackingQuality = await buildTrackingQuality(series);
+    const hasRoute = (routeSummary?.route?.length || 0) > 1;
+
     analytics.trackFeatureUsage('metronome', 'workout_stopped', {
       mode: mode,
       duration: duration,
@@ -494,6 +666,14 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       // Engine average when a workout drove cadence; for plain-metronome
       // sessions the engine never ran, so the current setting IS the cadence.
       avgCadence: Math.round(WorkoutEngine.getAverageCadence()) || cadence,
+      // FORGE-009: measured vs target (avgCadence above stays = target).
+      target_avg_cadence: cadenceSummary.targetAvgCadence ?? cadence,
+      measured_avg_cadence: cadenceSummary.measuredAvgCadence,
+      cadence_adherence_pct: cadenceSummary.adherencePct,
+      has_route: hasRoute,
+      cadence_source: stepTrackingRef.current ? 'phone' : 'none',
+      terrain_adjust_enabled: terrainEnabled,
+      tracking_quality: trackingQuality, // FORGE-009b
     });
 
     await MetronomeService.stop();
@@ -502,12 +682,6 @@ export default function MetronomeScreenSimple({ navigation, route }) {
     setCurrentBeat(0);
     setWorkoutActive(false);
     setFeelingModifier(null);
-
-    let routeSummary = null;
-    if (terrainEnabled) {
-      routeSummary = RouteTracker.stop();
-      stopLocationTracking();
-    }
 
     // Build workout summary — always show it
     const summary = {
@@ -521,6 +695,14 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       splitsMi: routeSummary?.splitsMi || [],
       feeling: feelingModifier?.label || null,
       terrainEnabled: terrainEnabled,
+      // FORGE-009: per-point series (capped) + measured-cadence summary, so
+      // the post-run report (FORGE-010) can draw cadence-vs-target over the
+      // route. Legacy workouts simply lack these keys.
+      points: downsamplePoints(routeSummary?.points || []),
+      targetAvgCadence: cadenceSummary.targetAvgCadence ?? cadence,
+      measuredAvgCadence: cadenceSummary.measuredAvgCadence,
+      cadenceAdherencePct: cadenceSummary.adherencePct,
+      cadenceSource: stepTrackingRef.current ? 'phone' : 'none',
     };
 
     // Save to history
@@ -535,6 +717,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   const adjustCadence = (change) => {
     const newCadence = Math.max(120, Math.min(200, cadence + change));
     setCadence(newCadence);
+    RouteTracker.updateCadence(newCadence); // keep recorded target current (FORGE-009)
     if (isPlaying) {
       MetronomeService.updateBpm(newCadence, stableHandleBeat);
     }
@@ -855,16 +1038,19 @@ export default function MetronomeScreenSimple({ navigation, route }) {
             ))}
           </View>
 
-          {/* GPS Terrain Toggle */}
+          {/* Terrain cadence-adjustment toggle. FORGE-009: routes are now
+              recorded on EVERY workout — this opt-in ONLY controls whether
+              hills move the target cadence (default OFF: it conflicts with
+              steady %-above-baseline retraining and is unvalidated). */}
           <TouchableOpacity
             style={[styles.terrainToggle, terrainEnabled && styles.terrainToggleActive]}
             onPress={() => setTerrainEnabled(!terrainEnabled)}
           >
             <Text style={[styles.terrainToggleText, terrainEnabled && styles.terrainToggleTextActive]}>
-              {terrainEnabled ? '📍 GPS TERRAIN ON' : '📍 GPS TERRAIN OFF'}
+              {terrainEnabled ? 'ADJUST BEAT ON HILLS — ON' : 'ADJUST BEAT ON HILLS — OFF'}
             </Text>
             <Text style={[styles.terrainToggleDesc, terrainEnabled && styles.terrainToggleDescActive]}>
-              Auto-adjusts cadence for hills
+              Moves the target cadence with the grade
             </Text>
           </TouchableOpacity>
         </View>
