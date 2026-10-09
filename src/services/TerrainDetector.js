@@ -29,7 +29,7 @@ export class TerrainDetector {
     const previousLocation = locationHistory[locationHistory.length - 2];
     
     // Calculate distance and elevation change
-    const distance = this.calculateDistance(previousLocation, currentLocation);
+    const distance = TerrainDetector.calculateDistance(previousLocation, currentLocation);
     const elevationChange = currentLocation.altitude - previousLocation.altitude;
     
     // Skip if distance is too small (GPS noise)
@@ -43,7 +43,7 @@ export class TerrainDetector {
     }
 
     // Calculate grade
-    const grade = this.calculateGrade(elevationChange, distance);
+    const grade = TerrainDetector.calculateGrade(elevationChange, distance);
     
     // Add to grade history for smoothing
     this.recentGrades.push(grade);
@@ -55,7 +55,7 @@ export class TerrainDetector {
     const smoothedGrade = this.getSmoothedGrade();
     
     // Classify terrain
-    const terrain = this.classifyTerrain(smoothedGrade);
+    const terrain = TerrainDetector.classifyTerrain(smoothedGrade);
     
     // Calculate cadence adjustment
     const cadenceAdjustment = this.calculateCadenceAdjustment(terrain, smoothedGrade);

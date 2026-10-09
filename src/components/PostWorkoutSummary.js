@@ -140,10 +140,15 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
                 <Text style={styles.statLabel}>PACE {paceUnit}</Text>
               </View>
             )}
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{summary.avgCadence || '--'}</Text>
-              <Text style={styles.statLabel}>AVG SPM</Text>
-            </View>
+            {/* Legacy-only: AVG SPM was the metronome target, so it just
+                duplicated TARGET SPM below (Andy, 10/8). Kept only for
+                workouts saved before measured cadence existed. */}
+            {summary.measuredAvgCadence == null && summary.targetAvgCadence == null && (
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>{summary.avgCadence || '--'}</Text>
+                <Text style={styles.statLabel}>AVG SPM</Text>
+              </View>
+            )}
           </View>
 
           {/* FORGE-009c: measured vs target cadence — the number Andy runs
@@ -200,7 +205,7 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
                         {formatPace(split.pace)}
                       </Text>
                       <Text style={[styles.splitText, styles.splitCol3]}>
-                        {split.avgCadence} SPM
+                        {split.measuredCadence ?? split.avgCadence} SPM
                       </Text>
                     </View>
                   ))}
