@@ -133,3 +133,24 @@ describe('downsamplePoints (persistence cap)', () => {
 test('default export is a singleton instance of RouteTracker', () => {
   expect(TrackerSingleton).toBeInstanceOf(RouteTracker);
 });
+
+// FORGE-009b: re-stamping measured cadence from history onto recorded points.
+describe('reattachMeasured', () => {
+  test('history lookup overwrites measured cadence; uncovered points keep theirs', () => {
+    const tracker = new RouteTracker();
+    tracker.start();
+    tracker.updateCadence(172);
+    tracker.updateMeasuredCadence(28); // locked-screen garbage
+    tracker.addPoint(loc(0, 5000));
+    tracker.addPoint(loc(1, 15000));
+    tracker.addPoint(loc(2, 95000)); // outside the rebuilt series
+    tracker.stop();
+
+    const lookup = (t) => (t <= 20000 ? 114 : null);
+    tracker.reattachMeasured(lookup);
+
+    expect(tracker.points.map((p) => p.measuredCadence)).toEqual([114, 114, 28]);
+    // Regenerated summary/averages use the corrected values.
+    expect(tracker.getAverageMeasuredCadence()).toBe(85); // (114+114+28)/3
+  });
+});

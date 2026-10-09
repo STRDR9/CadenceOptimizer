@@ -12,12 +12,25 @@
 // Graceful degradation is a hard requirement: permission denied, no hardware
 // (simulator), or any sensor error → start() resolves false, getCurrent()
 // reports { cadenceSpm: null, confidence: 'low' }, and the app carries on.
+//
+// FORGE-009b: live watchStepCount callbacks are throttled/batched once the
+// screen locks (field test: 28 spm reported on a ~115 spm walk). CMPedometer
+// records steps CONTINUOUSLY regardless of app state, so HISTORY QUERIES
+// (Pedometer.getStepCountAsync(start, end)) are the source of truth: each
+// update tick queries the trailing window, and at workout end
+// rebuildSeries() reconstructs the whole run in 10 s buckets for the final
+// stats and for re-attaching measured cadence to route points recorded while
+// locked. The live watcher stays only as a fallback when history queries are
+// unavailable.
 
 import { Pedometer } from 'expo-sensors';
 
 export const CADENCE_WINDOW_MS = 10000; // rolling window the cadence is measured over
 export const CADENCE_UPDATE_MS = 2000;  // how often a fresh value is computed
 export const STALE_STEP_MS = 10000;     // no new steps for this long => stale sensor
+export const SERIES_BUCKET_MS = 10000;  // history-rebuild bucket size (FORGE-009b)
+const MIN_PARTIAL_BUCKET_MS = 3000;     // trailing partial bucket shorter than this is dropped
+const REBUILD_CHUNK = 20;               // parallel history queries per chunk
 
 /**
  * Pure: derive steps-per-minute from cumulative step samples.
@@ -94,6 +107,70 @@ export function summarizeCadenceSamples(samples) {
   return { targetAvgCadence, measuredAvgCadence, adherencePct };
 }
 
+/**
+ * Pure (FORGE-009b): split [startMs, endMs] into cadence buckets.
+ * Full buckets of bucketMs, plus a trailing partial bucket when it is at
+ * least MIN_PARTIAL_BUCKET_MS long (shorter tails are too noisy to rate).
+ * @returns {Array<{start: number, end: number}>}
+ */
+export function makeCadenceBuckets(startMs, endMs, bucketMs = SERIES_BUCKET_MS) {
+  const buckets = [];
+  if (!(bucketMs > 0) || !(endMs > startMs)) return buckets;
+  let t = startMs;
+  while (t + bucketMs <= endMs) {
+    buckets.push({ start: t, end: t + bucketMs });
+    t += bucketMs;
+  }
+  if (endMs - t >= MIN_PARTIAL_BUCKET_MS) {
+    buckets.push({ start: t, end: endMs });
+  }
+  return buckets;
+}
+
+/**
+ * Pure (FORGE-009b): combine buckets with their step counts into a cadence
+ * series. A bucket whose count is not a number becomes cadenceSpm null
+ * (query failed) rather than 0 (which means "measured: not stepping").
+ * @returns {Array<{start, end, cadenceSpm: number|null}>}
+ */
+export function seriesFromBucketSteps(buckets, stepCounts) {
+  return (buckets || []).map((b, i) => {
+    const steps = stepCounts?.[i];
+    const spanMs = b.end - b.start;
+    const cadenceSpm =
+      typeof steps === 'number' && spanMs > 0
+        ? Math.round(steps / (spanMs / 60000))
+        : null;
+    return { start: b.start, end: b.end, cadenceSpm };
+  });
+}
+
+/**
+ * Pure (FORGE-009b): measured cadence at time t from a rebuilt series —
+ * the bucket containing t (start < t <= end), or null when none does or
+ * that bucket's query failed.
+ */
+export function measuredCadenceAt(series, t) {
+  if (!Array.isArray(series)) return null;
+  for (const bucket of series) {
+    if (t > bucket.start && t <= bucket.end) return bucket.cadenceSpm;
+  }
+  return null;
+}
+
+/**
+ * Pure (FORGE-009b): overwrite each live sample's measured value with the
+ * history-rebuilt one where a bucket covers it (history is the source of
+ * truth — live values recorded while locked are garbage). Samples outside
+ * the series keep their live value.
+ */
+export function mergeMeasuredIntoSamples(samples, series) {
+  return (samples || []).map((sample) => {
+    const measured = measuredCadenceAt(series, sample.t);
+    return measured == null ? sample : { ...sample, measured };
+  });
+}
+
 export class StepCadenceService {
   constructor() {
     this._sub = null;
@@ -104,6 +181,9 @@ export class StepCadenceService {
     this._current = null;        // last computed SPM (null until measurable)
     this._running = false;
     this._onSample = null;
+    this._historyBroken = false; // a failed history query disables that path for the session
+    this._historyQueryInFlight = false;
+    this._seriesCache = null;    // memoized rebuildSeries result (see method)
   }
 
   /**
@@ -126,6 +206,8 @@ export class StepCadenceService {
       this._lastStepIncreaseAt = null;
       this._movingHint = false;
       this._current = null;
+      this._historyBroken = false;
+      this._historyQueryInFlight = false;
       this._sub = Pedometer.watchStepCount((result) =>
         this._onSteps(result?.steps ?? 0)
       );
@@ -205,13 +287,92 @@ export class StepCadenceService {
   }
 
   _recompute() {
+    // FORGE-009b: history query is the source of truth (survives the screen
+    // locking); the live-sample window math is only the fallback when the
+    // history API is unavailable or a query fails.
+    if (typeof Pedometer.getStepCountAsync === 'function' && !this._historyBroken) {
+      this._recomputeFromHistory();
+      return;
+    }
     this._current = cadenceFromStepSamples(this._samples, Date.now());
+    this._emitSample();
+  }
+
+  async _recomputeFromHistory() {
+    if (this._historyQueryInFlight) return; // never stack queries
+    this._historyQueryInFlight = true;
+    const now = Date.now();
+    try {
+      const result = await Pedometer.getStepCountAsync(
+        new Date(now - CADENCE_WINDOW_MS),
+        new Date(now)
+      );
+      if (typeof result?.steps !== 'number') {
+        throw new Error('no steps in pedometer history result');
+      }
+      if (result.steps > 0) this._lastStepIncreaseAt = now;
+      this._current = Math.round(result.steps / (CADENCE_WINDOW_MS / 60000));
+    } catch (_error) {
+      // One failure => assume history is unusable this session and stay on
+      // the live-sample fallback instead of erroring every 2 s.
+      this._historyBroken = true;
+      this._current = cadenceFromStepSamples(this._samples, Date.now());
+    } finally {
+      this._historyQueryInFlight = false;
+    }
+    this._emitSample();
+  }
+
+  _emitSample() {
     if (this._onSample) {
       try {
         this._onSample(this.getCurrent());
       } catch (_error) {
         // sample consumers must never break measurement
       }
+    }
+  }
+
+  /**
+   * FORGE-009b: rebuild the full measured-cadence series for a finished
+   * workout from CMPedometer HISTORY, in SERIES_BUCKET_MS buckets. This is
+   * what makes locked-screen runs correct: the phone counted steps the whole
+   * time even if our callbacks never fired. Returns the series, or null when
+   * history is unavailable (caller keeps the live samples).
+   */
+  async rebuildSeries(startMs, endMs, bucketMs = SERIES_BUCKET_MS) {
+    if (typeof Pedometer.getStepCountAsync !== 'function') return null;
+    // Memoize: workout end fires both workout_stopped and workout_completed,
+    // which would otherwise run the full query pass twice back-to-back.
+    const cache = this._seriesCache;
+    if (
+      cache &&
+      cache.startMs === startMs &&
+      cache.bucketMs === bucketMs &&
+      Math.abs(cache.endMs - endMs) < 5000
+    ) {
+      return cache.series;
+    }
+    const buckets = makeCadenceBuckets(startMs, endMs, bucketMs);
+    if (buckets.length === 0) return null;
+    try {
+      const stepCounts = new Array(buckets.length);
+      for (let i = 0; i < buckets.length; i += REBUILD_CHUNK) {
+        const chunk = buckets.slice(i, i + REBUILD_CHUNK);
+        const results = await Promise.all(
+          chunk.map((b) =>
+            Pedometer.getStepCountAsync(new Date(b.start), new Date(b.end))
+          )
+        );
+        results.forEach((r, j) => {
+          stepCounts[i + j] = typeof r?.steps === 'number' ? r.steps : undefined;
+        });
+      }
+      const series = seriesFromBucketSteps(buckets, stepCounts);
+      this._seriesCache = { startMs, endMs, bucketMs, series };
+      return series;
+    } catch (_error) {
+      return null;
     }
   }
 }

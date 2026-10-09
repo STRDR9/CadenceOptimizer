@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Alert, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MetronomeService from '../services/MetronomeService';
 import LocationService from '../services/LocationService';
@@ -10,7 +10,11 @@ import SFIcon from '../components/SFIcon';
 import analytics from '../services/AnalyticsService';
 import PreWorkoutCheckIn from '../components/PreWorkoutCheckIn';
 import RouteTracker, { downsamplePoints } from '../services/RouteTracker';
-import StepCadenceService, { summarizeCadenceSamples } from '../services/StepCadenceService';
+import StepCadenceService, {
+  summarizeCadenceSamples,
+  measuredCadenceAt,
+  mergeMeasuredIntoSamples,
+} from '../services/StepCadenceService';
 import PostWorkoutSummary from '../components/PostWorkoutSummary';
 import SpotifyPlaylistBuilder from '../components/SpotifyPlaylistBuilder';
 import { getRunnerProfile, saveWorkoutToHistory } from '../utils/storage';
@@ -87,6 +91,10 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   const cadenceTargetRef = useRef(170);
   const cadenceSamplesRef = useRef([]);
   const stepTrackingRef = useRef(false);
+  // FORGE-009b: background-time accounting for tracking_quality analytics.
+  const bgAccumMsRef = useRef(0);
+  const bgSinceRef = useRef(null);
+  const workoutStartRef = useRef(null); // ms mirror of workoutStartTime for callbacks
 
   // Interval mode states
   const [intervalConfig, setIntervalConfig] = useState({
@@ -104,6 +112,42 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   useEffect(() => {
     cadenceTargetRef.current = cadence;
   }, [cadence]);
+
+  // FORGE-009b: accumulate time spent backgrounded/locked so workout events
+  // can report app_state_background_pct (explains a run's tracking quality).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      const now = Date.now();
+      if (next === 'active') {
+        if (bgSinceRef.current != null) {
+          bgAccumMsRef.current += now - bgSinceRef.current;
+          bgSinceRef.current = null;
+        }
+      } else if (bgSinceRef.current == null) {
+        bgSinceRef.current = now;
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  // FORGE-009b: snapshot of tracking health for workout analytics. Closes the
+  // background-time window without losing it (re-opens if still backgrounded).
+  const buildTrackingQuality = async (series) => {
+    const now = Date.now();
+    if (bgSinceRef.current != null) {
+      bgAccumMsRef.current += now - bgSinceRef.current;
+      bgSinceRef.current = now;
+    }
+    const elapsed = workoutStartRef.current ? now - workoutStartRef.current : 0;
+    return {
+      route_points: RouteTracker.points.length,
+      step_windows: series ? series.filter((b) => b.cadenceSpm != null).length : 0,
+      app_state_background_pct:
+        elapsed > 0 ? Math.min(100, Math.round((bgAccumMsRef.current / elapsed) * 100)) : 0,
+      location_permission: await LocationService.getPermissionLevel(),
+      location_mode: LocationService.trackingMode || 'none',
+    };
+  };
 
   // Update ref when isPlaying changes
   useEffect(() => {
@@ -123,7 +167,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
     }
   };
 
-  const handleWorkoutComplete = (workout, stats, completed) => {
+  const handleWorkoutComplete = async (workout, stats, completed) => {
     setWorkoutStatus({ active: false });
 
     // Engine stats carry totalTime (ms) + averageCadence — shape them into the
@@ -136,9 +180,17 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       statProps.durationSec = Math.round((Date.now() - workoutStartTime) / 1000);
     }
 
-    // FORGE-009: measured-vs-target cadence summary (normalized fields shared
-    // with workout_stopped; FORGE-008's avgCadence stays = target, for history)
-    const cadenceSummary = summarizeCadenceSamples(cadenceSamplesRef.current);
+    // FORGE-009/009b: measured-vs-target summary. Live samples are garbage
+    // for any locked-screen stretch, so rebuild from CMPedometer history
+    // when available (null => keep live samples: better than nothing).
+    let samples = cadenceSamplesRef.current;
+    let series = null;
+    if (workoutStartRef.current) {
+      series = await StepCadenceService.rebuildSeries(workoutStartRef.current, Date.now());
+      if (series) samples = mergeMeasuredIntoSamples(samples, series);
+    }
+    const cadenceSummary = summarizeCadenceSamples(samples);
+    const trackingQuality = await buildTrackingQuality(series);
 
     // Funnel payoff: did they run to completion, and for how long?
     analytics.trackFeatureUsage('metronome', 'workout_completed', {
@@ -151,6 +203,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       has_route: RouteTracker.points.length > 1,
       cadence_source: stepTrackingRef.current ? 'phone' : 'none',
       terrain_adjust_enabled: terrainEnabled,
+      tracking_quality: trackingQuality, // FORGE-009b
     });
 
     if (completed) {
@@ -444,7 +497,11 @@ export default function MetronomeScreenSimple({ navigation, route }) {
         terrain_adjust_enabled: terrainEnabled, // FORGE-009
       });
 
-      setWorkoutStartTime(Date.now());
+      const startedAt = Date.now();
+      setWorkoutStartTime(startedAt);
+      workoutStartRef.current = startedAt; // FORGE-009b: callbacks need it pre-commit
+      bgAccumMsRef.current = 0;            // FORGE-009b: per-workout background time
+      bgSinceRef.current = AppState.currentState === 'active' ? null : startedAt;
       if (modifier) setFeelingModifier(modifier);
       setWorkoutActive(true);
 
@@ -554,14 +611,29 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   };
 
   const endWorkout = async () => {
-    const duration = Date.now() - workoutStartTime;
+    const endedAt = Date.now();
+    const duration = endedAt - workoutStartTime;
 
     // FORGE-009: close out recording first so the analytics below see the
     // final route + cadence samples. Recording runs on every workout now.
-    const routeSummary = RouteTracker.stop();
+    RouteTracker.stop();
     stopLocationTracking();
     StepCadenceService.stop();
-    const cadenceSummary = summarizeCadenceSamples(cadenceSamplesRef.current);
+
+    // FORGE-009b: rebuild measured cadence from CMPedometer HISTORY — the
+    // phone counted steps the whole run even while locked, when our live
+    // callbacks were throttled into garbage (field test: 28 spm on a ~115
+    // spm walk). History overwrites live values in both the sample log and
+    // the recorded route points; null (no history / permission) keeps live.
+    let samples = cadenceSamplesRef.current;
+    const series = await StepCadenceService.rebuildSeries(workoutStartTime, endedAt);
+    if (series) {
+      samples = mergeMeasuredIntoSamples(samples, series);
+      RouteTracker.reattachMeasured((t) => measuredCadenceAt(series, t));
+    }
+    const routeSummary = RouteTracker.getSummary();
+    const cadenceSummary = summarizeCadenceSamples(samples);
+    const trackingQuality = await buildTrackingQuality(series);
     const hasRoute = (routeSummary?.route?.length || 0) > 1;
 
     analytics.trackFeatureUsage('metronome', 'workout_stopped', {
@@ -581,6 +653,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       has_route: hasRoute,
       cadence_source: stepTrackingRef.current ? 'phone' : 'none',
       terrain_adjust_enabled: terrainEnabled,
+      tracking_quality: trackingQuality, // FORGE-009b
     });
 
     await MetronomeService.stop();

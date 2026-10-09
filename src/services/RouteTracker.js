@@ -138,6 +138,20 @@ export class RouteTracker {
     }));
   }
 
+  /**
+   * FORGE-009b: re-stamp measuredCadence on recorded points from a
+   * history-rebuilt series (points recorded while the screen was locked
+   * carried garbage live values). `lookup(timestampMs)` returns the measured
+   * cadence or null; points the series doesn't cover keep their value.
+   * Call BEFORE getSummary()/getSplits() so split stats use corrected data.
+   */
+  reattachMeasured(lookup) {
+    this.points = this.points.map((p) => {
+      const measured = lookup(p.timestamp);
+      return measured == null ? p : { ...p, measuredCadence: measured };
+    });
+  }
+
   // Average TARGET cadence across all points (legacy name/semantics)
   getAverageCadence() {
     return averageOf(this.points, 'targetCadence');
