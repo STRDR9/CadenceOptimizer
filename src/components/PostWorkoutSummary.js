@@ -9,15 +9,110 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
+  Dimensions,
 } from 'react-native';
 import MapView, { Polyline, Marker } from 'react-native-maps';
+import Svg, { Polyline as SvgPolyline, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import {
   defaultUnitsFromLocale,
   computeElevationGain,
   computeCadenceDrift,
   estimateSteps,
   pickCadenceMarkers,
+  buildRouteSegments,
+  cadenceChartModel,
+  buildIntervalTable,
+  DEVIATION_COLORS,
 } from '../utils/summaryStats';
+
+// FORGE-010: route polylines colored by cadence deviation. Falls back to the
+// plain black line when points carry no usable data (legacy workouts).
+function DeviationPolylines({ route, points, strokeWidth }) {
+  const segments = buildRouteSegments(points);
+  if (segments.length === 0) {
+    return <Polyline coordinates={route} strokeColor="#000000" strokeWidth={strokeWidth} />;
+  }
+  return (
+    <>
+      {segments.map((seg, i) => (
+        <Polyline
+          key={`seg-${i}`}
+          coordinates={seg.coordinates}
+          strokeColor={DEVIATION_COLORS[seg.bucket]}
+          strokeWidth={strokeWidth}
+        />
+      ))}
+    </>
+  );
+}
+
+const pointsToStr = (pts) => pts.map((p) => `${p.x},${p.y}`).join(' ');
+
+// FORGE-010: measured-vs-target cadence over time. Measured = solid black
+// (broken where unmeasured), target = grey stepped dashes — deviation COLOR
+// lives on the map; the chart stays monochrome like the rest of the brand.
+function CadenceChart({ points }) {
+  const width = Dimensions.get('window').width - 32;
+  const model = cadenceChartModel(points, width, 180);
+  if (!model) return null;
+  return (
+    <View style={styles.chartSection}>
+      <Text style={styles.sectionTitle}>CADENCE</Text>
+      <Svg width={model.width} height={model.height}>
+        {model.yTicks.map((tick) => (
+          <React.Fragment key={`t-${tick.value}`}>
+            <SvgLine
+              x1={model.pad.l}
+              x2={model.width - model.pad.r}
+              y1={tick.y}
+              y2={tick.y}
+              stroke="#E5E5E5"
+              strokeWidth={1}
+            />
+            <SvgText x={4} y={tick.y + 4} fontSize={10} fill="#999">
+              {tick.value}
+            </SvgText>
+          </React.Fragment>
+        ))}
+        <SvgPolyline
+          points={pointsToStr(model.targetSteps)}
+          fill="none"
+          stroke="#999999"
+          strokeWidth={2}
+          strokeDasharray="6,4"
+        />
+        {model.measuredSegments.map((seg, i) => (
+          <SvgPolyline
+            key={`m-${i}`}
+            points={pointsToStr(seg)}
+            fill="none"
+            stroke="#000000"
+            strokeWidth={2.5}
+          />
+        ))}
+      </Svg>
+      <View style={styles.chartLegend}>
+        <View style={styles.legendItem}>
+          <View style={styles.legendSolid} />
+          <Text style={styles.legendText}>MEASURED</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <Svg width={18} height={4}>
+            <SvgLine x1={0} y1={2} x2={18} y2={2} stroke="#999" strokeWidth={2} strokeDasharray="4,3" />
+          </Svg>
+          <Text style={styles.legendText}>TARGET</Text>
+        </View>
+        <Text style={styles.legendText}>{Math.round(model.durationSec / 60)} MIN</Text>
+      </View>
+      {!model.hasMeasured && (
+        <Text style={styles.noMeasuredNote}>
+          No step data for this run — check Motion & Fitness permission and keep the
+          phone on your body (pocket or armband).
+        </Text>
+      )}
+    </View>
+  );
+}
 
 export { defaultUnitsFromLocale };
 
@@ -123,9 +218,9 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
                 pitchEnabled={false}
                 pointerEvents="none"
               >
-                <Polyline
-                  coordinates={summary.route}
-                  strokeColor="#000000"
+                <DeviationPolylines
+                  route={summary.route}
+                  points={summary.points}
                   strokeWidth={4}
                 />
                 <Marker
@@ -144,6 +239,26 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
               </View>
             </TouchableOpacity>
           )}
+
+          {/* FORGE-010: what the route colors mean (only when they're shown) */}
+          {hasRoute && buildRouteSegments(summary.points).length > 0 && (
+            <View style={styles.deviationLegend}>
+              {[
+                { bucket: 'on', label: 'ON ±2%' },
+                { bucket: 'near', label: '2–5%' },
+                { bucket: 'off', label: '>5%' },
+                { bucket: 'unknown', label: 'NO DATA' },
+              ].map((item) => (
+                <View key={item.bucket} style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: DEVIATION_COLORS[item.bucket] }]} />
+                  <Text style={styles.legendText}>{item.label}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* FORGE-010: cadence over time (hidden when no recorded points) */}
+          <CadenceChart points={summary.points} />
 
           {/* Overall Stats */}
           {/* 3 x 3 stat grid (Andy, 10/9): even rows/columns. '--' keeps the
@@ -229,6 +344,39 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
             </View>
           )}
 
+          {/* FORGE-010: per-phase table — only when the target actually
+              changed (interval/fartlek). Steady runs show nothing here. */}
+          {(() => {
+            // Workout modes only (ticket): terrain adjustments on a free run
+            // change the target too, and must not masquerade as phases.
+            if (summary.mode === 'free run') return null;
+            const phases = buildIntervalTable(summary.points);
+            if (phases.length < 2) return null;
+            return (
+              <View style={styles.splitsSection}>
+                <Text style={styles.sectionTitle}>PHASES</Text>
+                <View style={styles.splitsTable}>
+                  <View style={styles.splitsHeader}>
+                    <Text style={[styles.splitHeaderText, styles.phaseCol1]}>#</Text>
+                    <Text style={[styles.splitHeaderText, styles.phaseCol2]}>TARGET</Text>
+                    <Text style={[styles.splitHeaderText, styles.phaseCol3]}>ACTUAL</Text>
+                    <Text style={[styles.splitHeaderText, styles.phaseCol4]}>ON TGT</Text>
+                  </View>
+                  {phases.map((ph) => (
+                    <View key={ph.phase} style={styles.splitRow}>
+                      <Text style={[styles.splitText, styles.phaseCol1]}>{ph.phase}</Text>
+                      <Text style={[styles.splitText, styles.phaseCol2]}>{ph.target}</Text>
+                      <Text style={[styles.splitText, styles.phaseCol3]}>{ph.avgMeasured ?? '--'}</Text>
+                      <Text style={[styles.splitText, styles.phaseCol4]}>
+                        {ph.pctOnTarget != null ? `${ph.pctOnTarget}%` : '--'}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            );
+          })()}
+
           <TouchableOpacity style={styles.doneButton} onPress={onClose}>
             <Text style={styles.doneButtonText}>DONE</Text>
           </TouchableOpacity>
@@ -243,7 +391,7 @@ export default function PostWorkoutSummary({ visible, onClose, summary, units = 
         <Modal visible={mapExpanded} animationType="slide" onRequestClose={() => setMapExpanded(false)}>
           <View style={styles.fullMapContainer}>
             <MapView style={styles.fullMap} initialRegion={mapRegion}>
-              <Polyline coordinates={summary.route} strokeColor="#000000" strokeWidth={5} />
+              <DeviationPolylines route={summary.route} points={summary.points} strokeWidth={5} />
               <Marker coordinate={summary.route[0]} title="Start" pinColor="green" />
               <Marker coordinate={summary.route[summary.route.length - 1]} title="Finish" pinColor="red" />
               {pickCadenceMarkers(summary.points).map((p, i) => (
@@ -322,6 +470,61 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     alignItems: 'center',
   },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    color: '#000',
+    marginBottom: 8,
+  },
+  chartSection: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  deviationLegend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 14,
+    marginTop: -8,
+    marginBottom: 14,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendSolid: {
+    width: 18,
+    height: 3,
+    backgroundColor: '#000',
+  },
+  legendText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#999',
+    letterSpacing: 0.5,
+  },
+  noMeasuredNote: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 8,
+    lineHeight: 17,
+  },
+  phaseCol1: { width: '12%' },
+  phaseCol2: { width: '30%' },
+  phaseCol3: { width: '30%' },
+  phaseCol4: { width: '28%', textAlign: 'right' },
   unitHint: {
     fontSize: 11,
     color: '#BBB',
