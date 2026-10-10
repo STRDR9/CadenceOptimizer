@@ -727,6 +727,10 @@ export default function MetronomeScreenSimple({ navigation, route }) {
 
     await MetronomeService.stop();
     WorkoutEngine.stopWorkout();
+    // FORGE-013 review: end any in-flight coaching speech so the duckOthers
+    // session option is always released — if iOS interrupts speech (call,
+    // Siri) onDone may never fire and Spotify would stay ducked.
+    CoachingVoiceService.stopSpeaking();
     setIsPlaying(false);
     setCurrentBeat(0);
     setWorkoutActive(false);
