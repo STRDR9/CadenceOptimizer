@@ -17,8 +17,19 @@ import StepCadenceService, {
 } from '../services/StepCadenceService';
 import PostWorkoutSummary, { defaultUnitsFromLocale } from '../components/PostWorkoutSummary';
 import SpotifyPlaylistBuilder from '../components/SpotifyPlaylistBuilder';
-import { getRunnerProfile, saveWorkoutToHistory } from '../utils/storage';
+import { getRunnerProfile, saveWorkoutToHistory, getRunScreenPrefs, saveRunScreenPrefs } from '../utils/storage';
+import { formatCountdown } from '../utils/format';
 import { getQuickStartCadence } from '../services/cadenceModel';
+
+// FORGE-013: top tabs on the Run screen. Run = quick start + steady runs
+// (default), Intervals and Fartlek host the structured modes. Tab <-> engine
+// mode mapping lives here so the two can never drift.
+const RUN_TABS = [
+  { key: 'run', label: 'RUN', mode: 'none' },
+  { key: 'intervals', label: 'INTERVALS', mode: 'interval' },
+  { key: 'fartlek', label: 'FARTLEK', mode: 'fartlek' },
+];
+const modeForTab = (tabKey) => (RUN_TABS.find((t) => t.key === tabKey) || RUN_TABS[0]).mode;
 
 export default function MetronomeScreenSimple({ navigation, route }) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -28,6 +39,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   const [audioEnabled] = useState(true);
   const [workoutStartTime, setWorkoutStartTime] = useState(null);
   const [mode, setMode] = useState('none'); // none, fartlek, interval
+  const [runTab, setRunTab] = useState('run'); // FORGE-013: run | intervals | fartlek
   
   // Refs to avoid stale closures in callbacks
   const isPlayingRef = useRef(false);
@@ -280,18 +292,31 @@ export default function MetronomeScreenSimple({ navigation, route }) {
         const current = MetronomeService.getState().volume;
         duckBaseVolume.current = current;
         MetronomeService.setVolume(current * 0.3);
+        // FORGE-013 item 4: dip Spotify/podcasts too while the coach speaks.
+        MetronomeService.setVoiceDucking(true);
       },
       onEnd: () => {
         if (duckBaseVolume.current != null) {
           MetronomeService.setVolume(duckBaseVolume.current);
           duckBaseVolume.current = null;
         }
+        MetronomeService.setVoiceDucking(false);
       },
     });
 
     // Load profile units
     getRunnerProfile().then(profile => {
       if (profile?.units) setProfileUnits(profile.units);
+    });
+
+    // FORGE-013: restore last-used tab + persisted voice-coach choice.
+    getRunScreenPrefs().then((prefs) => {
+      // A pending Quick Start param wins — it must land on the Run tab.
+      if (!route?.params?.quickStart) {
+        setRunTab(prefs.lastRunTab);
+        setMode(modeForTab(prefs.lastRunTab));
+      }
+      setCoachingEnabled(prefs.coachingEnabled !== false);
     });
 
     // Update workout status every second when active
@@ -464,6 +489,11 @@ export default function MetronomeScreenSimple({ navigation, route }) {
 
   // Handle split completion — voice coaching check-in
   const handleSplitComplete = (split) => {
+    // FORGE-013: voice coaching lives on the Intervals/Fartlek tabs only.
+    // REMOVED from the Run tab by this gate: the per-split voice check-ins
+    // (distance milestone + split pace + "right on pace / slow down" advice)
+    // — the only Run-tab voice prompts that existed.
+    if (mode === 'none') return;
     if (!coachingEnabled) return;
 
     const unitLabel = profileUnits === 'imperial' ? 'mile' : 'kilometer';
@@ -581,6 +611,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
     quickStartSessionRef.current = true;
     const qsCadence = getQuickStartCadence();
     setCadence(qsCadence);
+    setRunTab('run'); // FORGE-013: quick start always lands on the Run tab
     setMode('none'); // stock settings: plain metronome, no workout engine
     startWorkout(null, { cadence: qsCadence, mode: 'none' });
     // Deliberately keyed to the quickStart param only; startWorkout/workoutActive
@@ -597,6 +628,22 @@ export default function MetronomeScreenSimple({ navigation, route }) {
     if (profile) return; // already personalized — nothing to pitch
     personalizePromptShownRef.current = true;
     setShowPersonalizePrompt(true);
+  };
+
+  // FORGE-013: switch top tab (and the engine mode with it). Locked during a
+  // session — changing the workout type mid-run was never meaningful and the
+  // old mode buttons allowed it.
+  const selectTab = (tabKey) => {
+    if (workoutActive || isPlaying) return;
+    setRunTab(tabKey);
+    setMode(modeForTab(tabKey));
+    saveRunScreenPrefs({ lastRunTab: tabKey });
+  };
+
+  const toggleCoaching = () => {
+    const next = !coachingEnabled;
+    setCoachingEnabled(next);
+    saveRunScreenPrefs({ coachingEnabled: next });
   };
 
   const handleCheckInSelect = (option) => {
@@ -729,6 +776,27 @@ export default function MetronomeScreenSimple({ navigation, route }) {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
     <ScrollView style={styles.container}>
       <View style={styles.section}>
+        {/* FORGE-013: top tabs — Run (default) · Intervals · Fartlek.
+            Locked during a session; last-used tab is persisted. */}
+        <View style={styles.topTabs}>
+          {RUN_TABS.map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[
+                styles.topTab,
+                runTab === tab.key && styles.topTabActive,
+                (workoutActive || isPlaying) && runTab !== tab.key && styles.topTabDisabled,
+              ]}
+              onPress={() => selectTab(tab.key)}
+              disabled={workoutActive || isPlaying}
+            >
+              <Text style={[styles.topTabText, runTab === tab.key && styles.topTabTextActive]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {/* Cadence Display - replaces old title */}
         <View style={styles.cadenceHeader}>
           <Text style={styles.cadenceValue}>{cadence}</Text>
@@ -794,6 +862,17 @@ export default function MetronomeScreenSimple({ navigation, route }) {
           </Text>
         </TouchableOpacity>
 
+        {/* FORGE-013: voice coach — small toggle below Start, structured
+            tabs only (the Run tab has no voice prompts anymore). Default ON,
+            choice persisted. Replaces the old full-width banner. */}
+        {runTab !== 'run' && (
+          <TouchableOpacity style={styles.voiceToggle} onPress={toggleCoaching} activeOpacity={0.7}>
+            <Text style={[styles.voiceToggleText, coachingEnabled && styles.voiceToggleTextActive]}>
+              VOICE COACH {coachingEnabled ? 'ON' : 'OFF'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* End Workout Button — visible once a workout has started */}
         {workoutActive && (
           <TouchableOpacity 
@@ -820,22 +899,15 @@ export default function MetronomeScreenSimple({ navigation, route }) {
           </TouchableOpacity>
         )}
 
-        {/* Voice Coaching Controls */}
-        <View style={styles.audioControls}>
-          <Text style={styles.controlLabel}>VOICE COACHING</Text>
-          
-          <TouchableOpacity 
-            style={[styles.audioToggle, coachingEnabled && styles.audioToggleActive]}
-            onPress={() => setCoachingEnabled(!coachingEnabled)}
-          >
-            <Text style={[styles.audioToggleText, coachingEnabled && styles.audioToggleTextActive]}>
-              {coachingEnabled ? 'ON' : 'OFF'}
+        {/* Spotify Music — Run tab only (FORGE-013): BPM matching targets
+            steady runs; structured modes change tempo every phase. */}
+        {runTab !== 'run' ? (
+          <View style={styles.musicUnavailable}>
+            <Text style={styles.musicUnavailableText}>
+              Music sync works on steady runs.
             </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Spotify Music */}
-        {spotifyUnavailable ? (
+          </View>
+        ) : spotifyUnavailable ? (
           <View style={styles.musicUnavailable}>
             <Text style={styles.musicUnavailableText}>
               Spotify matching is in limited beta — coming to everyone soon.
@@ -1011,35 +1083,14 @@ export default function MetronomeScreenSimple({ navigation, route }) {
                 />
               </View>
               <Text style={styles.statusTime}>
-                {Math.round(workoutStatus.phaseTimeRemaining || 0)}s remaining
+                {formatCountdown(workoutStatus.phaseTimeRemaining)} remaining
               </Text>
             </View>
           </View>
         )}
 
-        {/* Mode Selection */}
+        {/* FORGE-013: mode buttons replaced by the top tabs. */}
         <View style={styles.modeSection}>
-          <Text style={styles.controlLabel}>TRAINING MODE</Text>
-          <View style={styles.modeButtons}>
-            {[
-              { key: 'fartlek', label: 'FARTLEK', desc: 'Speed play' },
-              { key: 'interval', label: 'INTERVAL', desc: 'Work/rest' },
-            ].map((modeOption) => (
-              <TouchableOpacity
-                key={modeOption.key}
-                style={[styles.modeButton, mode === modeOption.key && styles.modeButtonActive]}
-                onPress={() => setMode(mode === modeOption.key ? 'none' : modeOption.key)}
-              >
-                <Text style={[styles.modeButtonText, mode === modeOption.key && styles.modeButtonTextActive]}>
-                  {modeOption.label}
-                </Text>
-                <Text style={[styles.modeButtonDesc, mode === modeOption.key && styles.modeButtonDescActive]}>
-                  {modeOption.desc}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
           {/* Terrain cadence-adjustment toggle. FORGE-009: routes are now
               recorded on EVERY workout — this opt-in ONLY controls whether
               hills move the target cadence (default OFF: it conflicts with
@@ -1347,6 +1398,52 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     borderWidth: 1,
     borderColor: '#E5E5E5',
+  },
+  topTabs: {
+    flexDirection: 'row',
+    backgroundColor: '#F2F2F2',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+  },
+  topTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 9,
+    alignItems: 'center',
+  },
+  topTabActive: {
+    backgroundColor: '#000',
+  },
+  topTabDisabled: {
+    opacity: 0.4,
+  },
+  topTabText: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: '#666',
+  },
+  topTabTextActive: {
+    color: '#FFF',
+  },
+  voiceToggle: {
+    alignSelf: 'center',
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+  },
+  voiceToggleText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: '#999',
+  },
+  voiceToggleTextActive: {
+    color: '#000',
   },
   modeButtons: {
     flexDirection: 'row',

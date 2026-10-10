@@ -24,6 +24,7 @@ export class MetronomeService {
     this.accentBuffer = null;
     this.nextNoteTime = 0;
     this.onBeat = null;
+    this.voiceDucking = false; // FORGE-013: duckOthers while the coach speaks
   }
 
   async initialize() {
@@ -47,6 +48,29 @@ export class MetronomeService {
       this.isInitialized = true;
     } catch (error) {
       console.error('Failed to initialize MetronomeService:', error);
+    }
+  }
+
+  /**
+   * FORGE-013 item 4: while the voice coach speaks, OTHER apps' audio
+   * (Spotify / podcasts) should dip too, not just our click. Flips the iOS
+   * session options to add `duckOthers` for the duration of a speech chain,
+   * then returns to plain mix-with-others — the F3 mixing behavior at rest
+   * is unchanged. Never throws (audio must never break the app); no-op off
+   * iOS and when the state isn't actually changing.
+   */
+  setVoiceDucking(active) {
+    const next = !!active;
+    if (this.voiceDucking === next) return;
+    this.voiceDucking = next;
+    try {
+      AudioManager.setAudioSessionOptions({
+        iosCategory: 'playback',
+        iosMode: 'default',
+        iosOptions: next ? ['mixWithOthers', 'duckOthers'] : ['mixWithOthers'],
+      });
+    } catch (_e) {
+      // Non-iOS or unavailable — safe to ignore.
     }
   }
 
