@@ -548,6 +548,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
           difficulty: fartlekDifficulty,
           duration: 1800,
           coachingEnabled: coachingEnabled,
+          terrainAware: terrainEnabled,
         });
         setWorkoutStatus(WorkoutEngine.getStatus());
       }
@@ -560,6 +561,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
           workCadence: Math.round(intervalConfig.workCadence + cadenceOffset),
           restCadence: Math.round(intervalConfig.restCadence + cadenceOffset),
           coachingEnabled: coachingEnabled,
+          terrainAware: terrainEnabled,
         });
         setWorkoutStatus(WorkoutEngine.getStatus());
       }
