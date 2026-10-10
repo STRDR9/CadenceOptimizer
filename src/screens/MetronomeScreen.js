@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Alert, AppState } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Alert, AppState, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MetronomeService from '../services/MetronomeService';
 import LocationService from '../services/LocationService';
@@ -868,13 +868,19 @@ export default function MetronomeScreenSimple({ navigation, route }) {
 
         {/* FORGE-013: voice coach — small toggle below Start, structured
             tabs only (the Run tab has no voice prompts anymore). Default ON,
-            choice persisted. Replaces the old full-width banner. */}
+            choice persisted. Real iOS Switch so on/off is unambiguous;
+            centered between Start and the music note (24pt each side). */}
         {runTab !== 'run' && (
-          <TouchableOpacity style={styles.voiceToggle} onPress={toggleCoaching} activeOpacity={0.7}>
-            <Text style={[styles.voiceToggleText, coachingEnabled && styles.voiceToggleTextActive]}>
-              VOICE COACH {coachingEnabled ? 'ON' : 'OFF'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.voiceToggle}>
+            <Text style={styles.voiceToggleText}>VOICE COACH</Text>
+            <Switch
+              value={coachingEnabled}
+              onValueChange={toggleCoaching}
+              trackColor={{ false: '#E5E5E5', true: '#0A0A0A' }}
+              ios_backgroundColor="#E5E5E5"
+              accessibilityLabel="Voice coach"
+            />
+          </View>
         )}
 
         {/* End Workout Button — visible once a workout has started */}
@@ -1186,6 +1192,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   terrainBadge: {
+    borderRadius: 8,
     fontFamily: 'Archivo_400Regular',
     fontSize: 11,
     color: '#6B6B6B',
@@ -1199,6 +1206,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   cueBanner: {
+    borderRadius: 14,
     backgroundColor: '#0A0A0A',
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -1211,6 +1219,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   visualSection: {
+    borderRadius: 14,
     alignItems: 'center',
     marginBottom: 16,
     backgroundColor: '#FFFFFF',
@@ -1247,6 +1256,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   adjustButton: {
+    borderRadius: 28,
     backgroundColor: '#FFFFFF',
     width: 56,
     height: 56,
@@ -1261,6 +1271,7 @@ const styles = StyleSheet.create({
     color: '#0A0A0A',
   },
   playButton: {
+    borderRadius: 14,
     backgroundColor: '#0A0A0A',
     paddingVertical: 20,
     alignItems: 'center',
@@ -1277,6 +1288,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   endWorkoutButton: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 15,
     alignItems: 'center',
@@ -1292,6 +1304,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   personalizePrompt: {
+    borderRadius: 14,
     backgroundColor: '#F4F4F4',
     padding: 20,
     marginBottom: 24,
@@ -1313,6 +1326,7 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
   },
   audioControls: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     padding: 20,
     marginBottom: 24,
@@ -1328,6 +1342,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   audioToggle: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 16,
     paddingHorizontal: 20,
@@ -1364,6 +1379,7 @@ const styles = StyleSheet.create({
     height: 40,
   },
   presets: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     padding: 20,
     marginBottom: 24,
@@ -1375,6 +1391,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   presetButton: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 16,
     paddingHorizontal: 20,
@@ -1397,6 +1414,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   modeSection: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     padding: 20,
     marginBottom: 24,
@@ -1432,22 +1450,19 @@ const styles = StyleSheet.create({
     color: '#FFF',
   },
   voiceToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     alignSelf: 'center',
-    marginTop: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
+    marginTop: 0, // playButton already gives 24 above
+    marginBottom: 24, // matches the 24 above -> centered
   },
   voiceToggleText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: 1,
-    color: '#999',
-  },
-  voiceToggleTextActive: {
-    color: '#000',
+    color: '#0A0A0A',
+    marginRight: 12,
   },
   modeButtons: {
     flexDirection: 'row',
@@ -1455,6 +1470,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   modeButton: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 14,
     paddingHorizontal: 12,
@@ -1487,6 +1503,7 @@ const styles = StyleSheet.create({
     color: '#B0B0B0',
   },
   configSection: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     padding: 20,
     marginBottom: 24,
@@ -1508,6 +1525,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   difficultyButton: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 14,
     paddingHorizontal: 12,
@@ -1540,6 +1558,7 @@ const styles = StyleSheet.create({
     color: '#B0B0B0',
   },
   coachingToggle: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 16,
     paddingHorizontal: 20,
@@ -1560,6 +1579,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   workoutStatus: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     padding: 20,
     marginBottom: 24,
@@ -1591,12 +1611,14 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   progressBar: {
+    borderRadius: 4,
     width: '100%',
     height: 6,
     backgroundColor: '#E5E5E5',
     marginBottom: 12,
   },
   progressFill: {
+    borderRadius: 4,
     height: '100%',
     backgroundColor: '#0A0A0A',
   },
@@ -1607,6 +1629,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   webNotice: {
+    borderRadius: 14,
     backgroundColor: '#F4F4F4',
     padding: 16,
     marginBottom: 24,
@@ -1639,6 +1662,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   durationButton: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -1661,6 +1685,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   numberSelector: {
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1669,6 +1694,7 @@ const styles = StyleSheet.create({
     borderColor: '#E5E5E5',
   },
   numberButton: {
+    borderRadius: 20,
     width: 40,
     height: 40,
     justifyContent: 'center',
@@ -1699,6 +1725,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   cadenceSelector: {
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1714,6 +1741,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   feelingIndicator: {
+    borderRadius: 14,
     backgroundColor: '#F4F4F4',
     padding: 12,
     marginBottom: 24,
@@ -1727,6 +1755,7 @@ const styles = StyleSheet.create({
     color: '#0A0A0A',
   },
   musicButton: {
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -1773,6 +1802,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   terrainToggle: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 16,
     paddingHorizontal: 20,
