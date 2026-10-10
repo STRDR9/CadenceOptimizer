@@ -19,6 +19,7 @@ import PostWorkoutSummary, { defaultUnitsFromLocale } from '../components/PostWo
 import SpotifyPlaylistBuilder from '../components/SpotifyPlaylistBuilder';
 import { getRunnerProfile, saveWorkoutToHistory, getRunScreenPrefs, saveRunScreenPrefs } from '../utils/storage';
 import { formatCountdown } from '../utils/format';
+import { buildSplitAnnouncement } from '../utils/splitAnnouncement';
 import { getQuickStartCadence } from '../services/cadenceModel';
 
 // FORGE-013: top tabs on the Run screen. Run = quick start + steady runs
@@ -65,6 +66,10 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   // Fartlek mode states
   const [workoutStatus, setWorkoutStatus] = useState({ active: false });
   const [coachingEnabled, setCoachingEnabled] = useState(true);
+  // FORGE-013: split callbacks are captured at workout start — read the
+  // live switch value through a ref so turning it off mid-run takes effect.
+  const coachingEnabledRef = useRef(true);
+  useEffect(() => { coachingEnabledRef.current = coachingEnabled; }, [coachingEnabled]);
   const [cueBanner, setCueBanner] = useState(null); // latest coaching cue, shown non-blocking on-screen
   const cueBannerTimer = useRef(null);
   // F8: while a coaching cue speaks we duck the metronome; this holds the
@@ -489,45 +494,19 @@ export default function MetronomeScreenSimple({ navigation, route }) {
 
   // Handle split completion — voice coaching check-in
   const handleSplitComplete = (split) => {
-    // FORGE-013: voice coaching lives on the Intervals/Fartlek tabs only.
-    // REMOVED from the Run tab by this gate: the per-split voice check-ins
-    // (distance milestone + split pace + "right on pace / slow down" advice)
-    // — the only Run-tab voice prompts that existed.
-    if (mode === 'none') return;
-    if (!coachingEnabled) return;
-
-    const unitLabel = profileUnits === 'imperial' ? 'mile' : 'kilometer';
-    const paceLabel = profileUnits === 'imperial' ? 'per mile' : 'per K';
-
-    const formatPace = (seconds) => {
-      const m = Math.floor(seconds / 60);
-      const s = Math.round(seconds % 60);
-      return `${m}:${s.toString().padStart(2, '0')}`;
-    };
-
-    const splitPace = formatPace(split.splitPace);
-
-    // Build the message
-    let message = `${unitLabel} ${split.splitNumber} complete. `;
-    message += `${splitPace} ${paceLabel}. `;
-    message += `Cadence ${split.splitCadence}. `;
-
-    // Compare to overall pace and give adjustment cue
-    const paceDiff = split.splitPace - split.overallPace;
-    if (paceDiff > 10) {
-      message += `You're slowing down. Pick it up a bit.`;
-    } else if (paceDiff < -10) {
-      message += `Running hot. Make sure you can hold this.`;
-    } else {
-      message += `Right on pace. Keep it steady.`;
-    }
-
+    // FORGE-013 (Andy 10/10): mile/km split announcements on EVERY tab —
+    // split number, split pace, running average pace, and measured cadence
+    // for the split + overall. Matches the mile markers on the route map.
+    // Text built (and unit-tested) in utils/splitAnnouncement.
+    if (!coachingEnabledRef.current) return;
+    const units = profileUnits === 'imperial' ? 'imperial' : 'metric';
     CoachingVoiceService.speakCoachingCue({
-      message,
+      message: buildSplitAnnouncement(split, units),
       type: 'instruction',
       priority: 'high',
     });
   };
+
 
   // Actually start the metronome and workout with optional feeling modifier.
   // `overrides` ({ cadence, mode }) lets programmatic starts (Quick Start)
@@ -867,21 +846,19 @@ export default function MetronomeScreenSimple({ navigation, route }) {
         </TouchableOpacity>
 
         {/* FORGE-013: voice coach — small toggle below Start, structured
-            tabs only (the Run tab has no voice prompts anymore). Default ON,
+            tabs AND Run tab (mile/km split announcements, Andy 10/10). Default ON,
             choice persisted. Real iOS Switch so on/off is unambiguous;
             centered between Start and the music note (24pt each side). */}
-        {runTab !== 'run' && (
-          <View style={styles.voiceToggle}>
-            <Text style={styles.voiceToggleText}>VOICE COACH</Text>
-            <Switch
-              value={coachingEnabled}
-              onValueChange={toggleCoaching}
-              trackColor={{ false: '#E5E5E5', true: '#0A0A0A' }}
-              ios_backgroundColor="#E5E5E5"
-              accessibilityLabel="Voice coach"
-            />
-          </View>
-        )}
+        <View style={styles.voiceToggle}>
+          <Text style={styles.voiceToggleText}>VOICE COACH</Text>
+          <Switch
+            value={coachingEnabled}
+            onValueChange={toggleCoaching}
+            trackColor={{ false: '#E5E5E5', true: '#0A0A0A' }}
+            ios_backgroundColor="#E5E5E5"
+            accessibilityLabel="Voice coach"
+          />
+        </View>
 
         {/* End Workout Button — visible once a workout has started */}
         {workoutActive && (
