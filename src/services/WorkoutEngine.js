@@ -13,6 +13,14 @@ import { getBaseCadence as modelBaseCadence } from './cadenceModel';
 // missed tick can never skip a transition.
 const WORKOUT_TICK_MS = 250;
 
+// Absolute cadence safety bounds. There used to be a hard 150 floor here,
+// which silently forced every slower phase (e.g. a 138 warm-up) up to 150 and
+// made fartlek/interval workouts sit on one tempo (Andy/Bridget, 2026-10-09).
+// 90-220 covers walk/run users through sprinting.
+export const CADENCE_MIN = 90;
+export const CADENCE_MAX = 220;
+const clampCadence = (c) => Math.max(CADENCE_MIN, Math.min(CADENCE_MAX, c));
+
 export class WorkoutEngine {
   constructor() {
     this.currentWorkout = null;
@@ -56,7 +64,7 @@ export class WorkoutEngine {
       duration: config.duration || 1800, // 30 minutes default
       difficulty: config.difficulty || 'intermediate', // beginner, intermediate, advanced, elite
       baseCadence: config.baseCadence || this.getBaseCadence(profile),
-      terrainAware: config.terrainAware !== false,
+      terrainAware: config.terrainAware === true, // opt-in: only when the user turned on "Adjust beat on hills"
       coachingEnabled: config.coachingEnabled !== false,
       ...config
     };
@@ -79,7 +87,7 @@ export class WorkoutEngine {
       restCadence: config.restCadence || this.getBaseCadence(profile) - 10,
       warmupDuration: config.warmupDuration || 300, // 5 minutes
       cooldownDuration: config.cooldownDuration || 300, // 5 minutes
-      terrainAware: config.terrainAware !== false,
+      terrainAware: config.terrainAware === true, // opt-in: only when the user turned on "Adjust beat on hills"
       coachingEnabled: config.coachingEnabled !== false,
       ...config
     };
@@ -100,7 +108,7 @@ export class WorkoutEngine {
       endCadence: config.endCadence || this.getBaseCadence(profile) + 20,
       progressionType: config.progressionType || 'linear', // linear, exponential, stepped
       stepDuration: config.stepDuration || 300, // 5 minutes per step
-      terrainAware: config.terrainAware !== false,
+      terrainAware: config.terrainAware === true, // opt-in: only when the user turned on "Adjust beat on hills"
       coachingEnabled: config.coachingEnabled !== false,
       ...config
     };
@@ -187,7 +195,7 @@ export class WorkoutEngine {
         newCadence = Math.round(baseCadence + cadenceChange);
         
         // Ensure reasonable bounds
-        newCadence = Math.max(150, Math.min(200, newCadence));
+        newCadence = clampCadence(newCadence);
         
         // Determine intensity
         if (newCadence > baseCadence + 10) {
@@ -714,7 +722,7 @@ export class WorkoutEngine {
     if (phase.terrainAdjustment) {
       const terrainAdjustment = this.getTerrainAdjustment();
       adjustedCadence = Math.round(phase.cadence + terrainAdjustment);
-      adjustedCadence = Math.max(150, Math.min(200, adjustedCadence));
+      adjustedCadence = clampCadence(adjustedCadence);
     }
 
     // Track the phase's cadence for the time-weighted average (stats.averageCadence).
