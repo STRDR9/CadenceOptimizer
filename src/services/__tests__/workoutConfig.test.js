@@ -93,3 +93,28 @@ describe('fartlek difficulty actually changes the workout', () => {
     });
   });
 });
+
+describe('interval voice cues say the warmup / cooldown length', () => {
+  const withVoice = (o = {}) => build({ coachingEnabled: true, ...o });
+
+  test('warmup cue: real interval count + length + cadence', () => {
+    const w = withVoice({ intervals: 5, restCadence: 160 });
+    expect(w.phases[0].coachingCues[0].message).toBe(
+      'Starting your interval workout. 5 intervals ahead. 5 minute warmup at 160 steps per minute.'
+    );
+  });
+
+  test('never says "0 intervals ahead"; singular for 1', () => {
+    const w = withVoice({ intervals: 1 });
+    expect(w.phases[0].coachingCues[0].message).toContain('1 interval ahead.');
+    expect(w.phases[0].coachingCues[0].message).not.toContain('0 intervals');
+  });
+
+  test('odd lengths read as m:ss; cooldown says its length too', () => {
+    const w = withVoice({ warmupDuration: 270, cooldownDuration: 300, restCadence: 160 });
+    expect(w.phases[0].coachingCues[0].message).toContain('4:30 warmup at 160');
+    expect(w.phases[w.phases.length - 1].coachingCues[0].message).toBe(
+      'Cooldown. 5 minutes easy at 160. Nice work.'
+    );
+  });
+});

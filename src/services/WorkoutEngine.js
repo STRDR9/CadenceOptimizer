@@ -280,7 +280,7 @@ export class WorkoutEngine {
       duration: warmupDuration,
       intensity: 'warmup',
       type: 'interval',
-      coachingCues: this.generateIntervalCoachingCues('warmup', restCadence, 0, coachingEnabled),
+      coachingCues: this.generateIntervalCoachingCues('warmup', restCadence, 0, coachingEnabled, intervals, warmupDuration),
       terrainAdjustment: config.terrainAware,
     });
     currentTime += warmupDuration;
@@ -325,7 +325,7 @@ export class WorkoutEngine {
       duration: cooldownDuration,
       intensity: 'cooldown',
       type: 'interval',
-      coachingCues: this.generateIntervalCoachingCues('cooldown', restCadence, 0, coachingEnabled),
+      coachingCues: this.generateIntervalCoachingCues('cooldown', restCadence, 0, coachingEnabled, intervals, cooldownDuration),
       terrainAdjustment: config.terrainAware,
     });
     currentTime += cooldownDuration;
@@ -527,8 +527,19 @@ export class WorkoutEngine {
    * @param {number} totalIntervals - Total number of intervals
    * @returns {Array} Array of coaching cues
    */
-  generateIntervalCoachingCues(phaseType, cadence, intervalNumber, enabled, totalIntervals = 0) {
+  generateIntervalCoachingCues(phaseType, cadence, intervalNumber, enabled, totalIntervals = 0, phaseDurationSec = 0) {
     if (!enabled) return [];
+
+    // Andy 10/11: say the warmup/cooldown length out loud instead of adding a
+    // line to the (already busy) interval panel. 300 -> "5 minute",
+    // 270 -> "4:30".
+    const spokenLength = (sec, plural = false) => {
+      const t = Math.round(Number(sec) || 0);
+      if (t <= 0) return null;
+      const m = Math.floor(t / 60);
+      const r = t % 60;
+      return r === 0 ? `${m} minute${plural && m !== 1 ? 's' : ''}` : `${m}:${r.toString().padStart(2, '0')}`;
+    };
 
     const cues = [];
 
@@ -536,7 +547,13 @@ export class WorkoutEngine {
       case 'warmup':
         cues.push({
           timing: 0,
-          message: `Starting your interval workout. ${totalIntervals} intervals ahead. Warming up at ${cadence} steps per minute.`,
+          message: [
+            'Starting your interval workout.',
+            totalIntervals > 0 ? `${totalIntervals} ${totalIntervals === 1 ? 'interval' : 'intervals'} ahead.` : null,
+            spokenLength(phaseDurationSec)
+              ? `${spokenLength(phaseDurationSec)} warmup at ${cadence} steps per minute.`
+              : `Warming up at ${cadence} steps per minute.`,
+          ].filter(Boolean).join(' '),
           type: 'instruction',
           priority: 'urgent'
         });
@@ -575,7 +592,9 @@ export class WorkoutEngine {
       case 'cooldown':
         cues.push({
           timing: 0,
-          message: `Cooldown. Nice work`,
+          message: spokenLength(phaseDurationSec)
+            ? `Cooldown. ${spokenLength(phaseDurationSec, true)} easy at ${cadence}. Nice work.`
+            : 'Cooldown. Nice work.',
           type: 'motivation',
           priority: 'high'
         });
