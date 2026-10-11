@@ -138,3 +138,32 @@ export const getWorkoutHistory = async () => {
     return [];
   }
 };
+
+/**
+ * Run-screen UI preferences (FORGE-013): last-used tab (run | intervals |
+ * fartlek) and the voice-coach toggle. Merge-writes so partial updates
+ * never clobber the other fields.
+ */
+const RUN_SCREEN_PREFS_KEY = '@run_screen_prefs';
+
+export const getRunScreenPrefs = async () => {
+  try {
+    const data = await AsyncStorage.getItem(RUN_SCREEN_PREFS_KEY);
+    const stored = data ? JSON.parse(data) : {};
+    return { lastRunTab: 'run', coachingEnabled: true, ...stored };
+  } catch (error) {
+    console.error('Error getting run screen prefs:', error);
+    return { lastRunTab: 'run', coachingEnabled: true };
+  }
+};
+
+export const saveRunScreenPrefs = async (partial) => {
+  try {
+    const current = await getRunScreenPrefs();
+    await AsyncStorage.setItem(RUN_SCREEN_PREFS_KEY, JSON.stringify({ ...current, ...partial }));
+    return true;
+  } catch (error) {
+    console.error('Error saving run screen prefs:', error);
+    return false;
+  }
+};

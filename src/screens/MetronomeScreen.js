@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Alert, AppState } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Alert, AppState, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MetronomeService from '../services/MetronomeService';
 import LocationService from '../services/LocationService';
@@ -17,8 +17,20 @@ import StepCadenceService, {
 } from '../services/StepCadenceService';
 import PostWorkoutSummary, { defaultUnitsFromLocale } from '../components/PostWorkoutSummary';
 import SpotifyPlaylistBuilder from '../components/SpotifyPlaylistBuilder';
-import { getRunnerProfile, saveWorkoutToHistory } from '../utils/storage';
+import { getRunnerProfile, saveWorkoutToHistory, getRunScreenPrefs, saveRunScreenPrefs } from '../utils/storage';
+import { formatCountdown } from '../utils/format';
+import { buildSplitAnnouncement } from '../utils/splitAnnouncement';
 import { getQuickStartCadence } from '../services/cadenceModel';
+
+// FORGE-013: top tabs on the Run screen. Run = quick start + steady runs
+// (default), Intervals and Fartlek host the structured modes. Tab <-> engine
+// mode mapping lives here so the two can never drift.
+const RUN_TABS = [
+  { key: 'run', label: 'RUN', mode: 'none' },
+  { key: 'intervals', label: 'INTERVALS', mode: 'interval' },
+  { key: 'fartlek', label: 'FARTLEK', mode: 'fartlek' },
+];
+const modeForTab = (tabKey) => (RUN_TABS.find((t) => t.key === tabKey) || RUN_TABS[0]).mode;
 
 export default function MetronomeScreenSimple({ navigation, route }) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -28,6 +40,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   const [audioEnabled] = useState(true);
   const [workoutStartTime, setWorkoutStartTime] = useState(null);
   const [mode, setMode] = useState('none'); // none, fartlek, interval
+  const [runTab, setRunTab] = useState('run'); // FORGE-013: run | intervals | fartlek
   
   // Refs to avoid stale closures in callbacks
   const isPlayingRef = useRef(false);
@@ -53,6 +66,10 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   // Fartlek mode states
   const [workoutStatus, setWorkoutStatus] = useState({ active: false });
   const [coachingEnabled, setCoachingEnabled] = useState(true);
+  // FORGE-013: split callbacks are captured at workout start — read the
+  // live switch value through a ref so turning it off mid-run takes effect.
+  const coachingEnabledRef = useRef(true);
+  useEffect(() => { coachingEnabledRef.current = coachingEnabled; }, [coachingEnabled]);
   const [cueBanner, setCueBanner] = useState(null); // latest coaching cue, shown non-blocking on-screen
   const cueBannerTimer = useRef(null);
   // F8: while a coaching cue speaks we duck the metronome; this holds the
@@ -280,18 +297,31 @@ export default function MetronomeScreenSimple({ navigation, route }) {
         const current = MetronomeService.getState().volume;
         duckBaseVolume.current = current;
         MetronomeService.setVolume(current * 0.3);
+        // FORGE-013 item 4: dip Spotify/podcasts too while the coach speaks.
+        MetronomeService.setVoiceDucking(true);
       },
       onEnd: () => {
         if (duckBaseVolume.current != null) {
           MetronomeService.setVolume(duckBaseVolume.current);
           duckBaseVolume.current = null;
         }
+        MetronomeService.setVoiceDucking(false);
       },
     });
 
     // Load profile units
     getRunnerProfile().then(profile => {
       if (profile?.units) setProfileUnits(profile.units);
+    });
+
+    // FORGE-013: restore last-used tab + persisted voice-coach choice.
+    getRunScreenPrefs().then((prefs) => {
+      // A pending Quick Start param wins — it must land on the Run tab.
+      if (!route?.params?.quickStart) {
+        setRunTab(prefs.lastRunTab);
+        setMode(modeForTab(prefs.lastRunTab));
+      }
+      setCoachingEnabled(prefs.coachingEnabled !== false);
     });
 
     // Update workout status every second when active
@@ -464,40 +494,19 @@ export default function MetronomeScreenSimple({ navigation, route }) {
 
   // Handle split completion — voice coaching check-in
   const handleSplitComplete = (split) => {
-    if (!coachingEnabled) return;
-
-    const unitLabel = profileUnits === 'imperial' ? 'mile' : 'kilometer';
-    const paceLabel = profileUnits === 'imperial' ? 'per mile' : 'per K';
-
-    const formatPace = (seconds) => {
-      const m = Math.floor(seconds / 60);
-      const s = Math.round(seconds % 60);
-      return `${m}:${s.toString().padStart(2, '0')}`;
-    };
-
-    const splitPace = formatPace(split.splitPace);
-
-    // Build the message
-    let message = `${unitLabel} ${split.splitNumber} complete. `;
-    message += `${splitPace} ${paceLabel}. `;
-    message += `Cadence ${split.splitCadence}. `;
-
-    // Compare to overall pace and give adjustment cue
-    const paceDiff = split.splitPace - split.overallPace;
-    if (paceDiff > 10) {
-      message += `You're slowing down. Pick it up a bit.`;
-    } else if (paceDiff < -10) {
-      message += `Running hot. Make sure you can hold this.`;
-    } else {
-      message += `Right on pace. Keep it steady.`;
-    }
-
+    // FORGE-013 (Andy 10/10): mile/km split announcements on EVERY tab —
+    // split number, split pace, running average pace, and measured cadence
+    // for the split + overall. Matches the mile markers on the route map.
+    // Text built (and unit-tested) in utils/splitAnnouncement.
+    if (!coachingEnabledRef.current) return;
+    const units = profileUnits === 'imperial' ? 'imperial' : 'metric';
     CoachingVoiceService.speakCoachingCue({
-      message,
+      message: buildSplitAnnouncement(split, units),
       type: 'instruction',
       priority: 'high',
     });
   };
+
 
   // Actually start the metronome and workout with optional feeling modifier.
   // `overrides` ({ cadence, mode }) lets programmatic starts (Quick Start)
@@ -581,6 +590,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
     quickStartSessionRef.current = true;
     const qsCadence = getQuickStartCadence();
     setCadence(qsCadence);
+    setRunTab('run'); // FORGE-013: quick start always lands on the Run tab
     setMode('none'); // stock settings: plain metronome, no workout engine
     startWorkout(null, { cadence: qsCadence, mode: 'none' });
     // Deliberately keyed to the quickStart param only; startWorkout/workoutActive
@@ -597,6 +607,22 @@ export default function MetronomeScreenSimple({ navigation, route }) {
     if (profile) return; // already personalized — nothing to pitch
     personalizePromptShownRef.current = true;
     setShowPersonalizePrompt(true);
+  };
+
+  // FORGE-013: switch top tab (and the engine mode with it). Locked during a
+  // session — changing the workout type mid-run was never meaningful and the
+  // old mode buttons allowed it.
+  const selectTab = (tabKey) => {
+    if (workoutActive || isPlaying) return;
+    setRunTab(tabKey);
+    setMode(modeForTab(tabKey));
+    saveRunScreenPrefs({ lastRunTab: tabKey });
+  };
+
+  const toggleCoaching = () => {
+    const next = !coachingEnabled;
+    setCoachingEnabled(next);
+    saveRunScreenPrefs({ coachingEnabled: next });
   };
 
   const handleCheckInSelect = (option) => {
@@ -680,6 +706,10 @@ export default function MetronomeScreenSimple({ navigation, route }) {
 
     await MetronomeService.stop();
     WorkoutEngine.stopWorkout();
+    // FORGE-013 review: end any in-flight coaching speech so the duckOthers
+    // session option is always released — if iOS interrupts speech (call,
+    // Siri) onDone may never fire and Spotify would stay ducked.
+    CoachingVoiceService.stopSpeaking();
     setIsPlaying(false);
     setCurrentBeat(0);
     setWorkoutActive(false);
@@ -729,6 +759,27 @@ export default function MetronomeScreenSimple({ navigation, route }) {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
     <ScrollView style={styles.container}>
       <View style={styles.section}>
+        {/* FORGE-013: top tabs — Run (default) · Intervals · Fartlek.
+            Locked during a session; last-used tab is persisted. */}
+        <View style={styles.topTabs}>
+          {RUN_TABS.map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[
+                styles.topTab,
+                runTab === tab.key && styles.topTabActive,
+                (workoutActive || isPlaying) && runTab !== tab.key && styles.topTabDisabled,
+              ]}
+              onPress={() => selectTab(tab.key)}
+              disabled={workoutActive || isPlaying}
+            >
+              <Text style={[styles.topTabText, runTab === tab.key && styles.topTabTextActive]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {/* Cadence Display - replaces old title */}
         <View style={styles.cadenceHeader}>
           <Text style={styles.cadenceValue}>{cadence}</Text>
@@ -794,6 +845,21 @@ export default function MetronomeScreenSimple({ navigation, route }) {
           </Text>
         </TouchableOpacity>
 
+        {/* FORGE-013: voice coach — small toggle below Start, structured
+            tabs AND Run tab (mile/km split announcements, Andy 10/10). Default ON,
+            choice persisted. Real iOS Switch so on/off is unambiguous;
+            centered between Start and the music note (24pt each side). */}
+        <View style={styles.voiceToggle}>
+          <Text style={styles.voiceToggleText}>VOICE COACH</Text>
+          <Switch
+            value={coachingEnabled}
+            onValueChange={toggleCoaching}
+            trackColor={{ false: '#E5E5E5', true: '#0A0A0A' }}
+            ios_backgroundColor="#E5E5E5"
+            accessibilityLabel="Voice coach"
+          />
+        </View>
+
         {/* End Workout Button — visible once a workout has started */}
         {workoutActive && (
           <TouchableOpacity 
@@ -820,22 +886,15 @@ export default function MetronomeScreenSimple({ navigation, route }) {
           </TouchableOpacity>
         )}
 
-        {/* Voice Coaching Controls */}
-        <View style={styles.audioControls}>
-          <Text style={styles.controlLabel}>VOICE COACHING</Text>
-          
-          <TouchableOpacity 
-            style={[styles.audioToggle, coachingEnabled && styles.audioToggleActive]}
-            onPress={() => setCoachingEnabled(!coachingEnabled)}
-          >
-            <Text style={[styles.audioToggleText, coachingEnabled && styles.audioToggleTextActive]}>
-              {coachingEnabled ? 'ON' : 'OFF'}
+        {/* Spotify Music — Run tab only (FORGE-013): BPM matching targets
+            steady runs; structured modes change tempo every phase. */}
+        {runTab !== 'run' ? (
+          <View style={styles.musicUnavailable}>
+            <Text style={styles.musicUnavailableText}>
+              Music sync works on steady runs.
             </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Spotify Music */}
-        {spotifyUnavailable ? (
+          </View>
+        ) : spotifyUnavailable ? (
           <View style={styles.musicUnavailable}>
             <Text style={styles.musicUnavailableText}>
               Spotify matching is in limited beta — coming to everyone soon.
@@ -1011,35 +1070,14 @@ export default function MetronomeScreenSimple({ navigation, route }) {
                 />
               </View>
               <Text style={styles.statusTime}>
-                {Math.round(workoutStatus.phaseTimeRemaining || 0)}s remaining
+                {formatCountdown(workoutStatus.phaseTimeRemaining)} remaining
               </Text>
             </View>
           </View>
         )}
 
-        {/* Mode Selection */}
+        {/* FORGE-013: mode buttons replaced by the top tabs. */}
         <View style={styles.modeSection}>
-          <Text style={styles.controlLabel}>TRAINING MODE</Text>
-          <View style={styles.modeButtons}>
-            {[
-              { key: 'fartlek', label: 'FARTLEK', desc: 'Speed play' },
-              { key: 'interval', label: 'INTERVAL', desc: 'Work/rest' },
-            ].map((modeOption) => (
-              <TouchableOpacity
-                key={modeOption.key}
-                style={[styles.modeButton, mode === modeOption.key && styles.modeButtonActive]}
-                onPress={() => setMode(mode === modeOption.key ? 'none' : modeOption.key)}
-              >
-                <Text style={[styles.modeButtonText, mode === modeOption.key && styles.modeButtonTextActive]}>
-                  {modeOption.label}
-                </Text>
-                <Text style={[styles.modeButtonDesc, mode === modeOption.key && styles.modeButtonDescActive]}>
-                  {modeOption.desc}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
           {/* Terrain cadence-adjustment toggle. FORGE-009: routes are now
               recorded on EVERY workout — this opt-in ONLY controls whether
               hills move the target cadence (default OFF: it conflicts with
@@ -1131,6 +1169,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   terrainBadge: {
+    borderRadius: 8,
     fontFamily: 'Archivo_400Regular',
     fontSize: 11,
     color: '#6B6B6B',
@@ -1144,6 +1183,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   cueBanner: {
+    borderRadius: 14,
     backgroundColor: '#0A0A0A',
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -1156,6 +1196,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   visualSection: {
+    borderRadius: 14,
     alignItems: 'center',
     marginBottom: 16,
     backgroundColor: '#FFFFFF',
@@ -1192,6 +1233,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   adjustButton: {
+    borderRadius: 28,
     backgroundColor: '#FFFFFF',
     width: 56,
     height: 56,
@@ -1206,6 +1248,7 @@ const styles = StyleSheet.create({
     color: '#0A0A0A',
   },
   playButton: {
+    borderRadius: 14,
     backgroundColor: '#0A0A0A',
     paddingVertical: 20,
     alignItems: 'center',
@@ -1222,6 +1265,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   endWorkoutButton: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 15,
     alignItems: 'center',
@@ -1237,6 +1281,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   personalizePrompt: {
+    borderRadius: 14,
     backgroundColor: '#F4F4F4',
     padding: 20,
     marginBottom: 24,
@@ -1258,6 +1303,7 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
   },
   audioControls: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     padding: 20,
     marginBottom: 24,
@@ -1273,6 +1319,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   audioToggle: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 16,
     paddingHorizontal: 20,
@@ -1309,6 +1356,7 @@ const styles = StyleSheet.create({
     height: 40,
   },
   presets: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     padding: 20,
     marginBottom: 24,
@@ -1320,6 +1368,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   presetButton: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 16,
     paddingHorizontal: 20,
@@ -1342,11 +1391,55 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   modeSection: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     padding: 20,
     marginBottom: 24,
     borderWidth: 1,
     borderColor: '#E5E5E5',
+  },
+  topTabs: {
+    flexDirection: 'row',
+    backgroundColor: '#F2F2F2',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+  },
+  topTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 9,
+    alignItems: 'center',
+  },
+  topTabActive: {
+    backgroundColor: '#000',
+  },
+  topTabDisabled: {
+    opacity: 0.4,
+  },
+  topTabText: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: '#666',
+  },
+  topTabTextActive: {
+    color: '#FFF',
+  },
+  voiceToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginTop: 0, // playButton already gives 24 above
+    marginBottom: 24, // matches the 24 above -> centered
+  },
+  voiceToggleText: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: '#0A0A0A',
+    marginRight: 12,
   },
   modeButtons: {
     flexDirection: 'row',
@@ -1354,6 +1447,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   modeButton: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 14,
     paddingHorizontal: 12,
@@ -1386,6 +1480,7 @@ const styles = StyleSheet.create({
     color: '#B0B0B0',
   },
   configSection: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     padding: 20,
     marginBottom: 24,
@@ -1407,6 +1502,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   difficultyButton: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 14,
     paddingHorizontal: 12,
@@ -1439,6 +1535,7 @@ const styles = StyleSheet.create({
     color: '#B0B0B0',
   },
   coachingToggle: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 16,
     paddingHorizontal: 20,
@@ -1459,6 +1556,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   workoutStatus: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     padding: 20,
     marginBottom: 24,
@@ -1490,12 +1588,14 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   progressBar: {
+    borderRadius: 4,
     width: '100%',
     height: 6,
     backgroundColor: '#E5E5E5',
     marginBottom: 12,
   },
   progressFill: {
+    borderRadius: 4,
     height: '100%',
     backgroundColor: '#0A0A0A',
   },
@@ -1506,6 +1606,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   webNotice: {
+    borderRadius: 14,
     backgroundColor: '#F4F4F4',
     padding: 16,
     marginBottom: 24,
@@ -1538,6 +1639,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   durationButton: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -1560,6 +1662,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   numberSelector: {
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1568,6 +1671,7 @@ const styles = StyleSheet.create({
     borderColor: '#E5E5E5',
   },
   numberButton: {
+    borderRadius: 20,
     width: 40,
     height: 40,
     justifyContent: 'center',
@@ -1598,6 +1702,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   cadenceSelector: {
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1613,6 +1718,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   feelingIndicator: {
+    borderRadius: 14,
     backgroundColor: '#F4F4F4',
     padding: 12,
     marginBottom: 24,
@@ -1626,6 +1732,7 @@ const styles = StyleSheet.create({
     color: '#0A0A0A',
   },
   musicButton: {
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -1672,6 +1779,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   terrainToggle: {
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     paddingVertical: 16,
     paddingHorizontal: 20,

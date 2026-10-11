@@ -129,8 +129,10 @@ export default function App() {
         <Tab.Screen 
           name="Metronome" 
           component={MetronomeScreen}
-          options={{ 
-            title: 'METRONOME',
+          options={{
+            // FORGE-013: header must match the tab (the route is still named
+            // "Metronome" internally — analytics/screen tracking keys off it).
+            title: 'RUN',
             tabBarLabel: 'RUN'
           }}
         />

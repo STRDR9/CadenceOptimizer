@@ -95,6 +95,9 @@ export class RouteTracker {
           splitPace: paceSeconds,
           splitCadence: avgCadence, // target-based (legacy name)
           splitMeasuredCadence: averageOf(splitPoints, 'measuredCadence') || null,
+          // FORGE-013 voice splits: whole-run measured average so far
+          // (incl. this point, which is pushed just after the callback).
+          overallMeasuredCadence: averageOf(this.points.concat(point), 'measuredCadence') || null,
           overallPace,
           totalDistance: this.cumulativeDistance,
         });
