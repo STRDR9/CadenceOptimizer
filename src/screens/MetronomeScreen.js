@@ -873,19 +873,59 @@ export default function MetronomeScreenSimple({ navigation, route }) {
           </Text>
         </View>
 
-        {/* Live in-run stats (Andy 10/11) — every tab, only during a workout */}
+        {/* Live in-run stats (Andy 10/11) — every tab, only during a workout.
+            Intervals/Fartlek: ONE card = phase + distance + total time +
+            time left in the interval (replaces the separate Workout Status
+            card). Run tab: distance + time. */}
         {workoutActive && (() => {
           const d = formatDistance(liveStats.meters, profileUnits === 'imperial' ? 'imperial' : 'metric');
+          const distLabel = d.unit === 'mi' ? 'MILES' : 'KM';
+          if (workoutStatus.active) {
+            const phase = workoutStatus.phase;
+            const intensity = phase?.intensity === 'hard' ? 'HIGH INTENSITY'
+              : phase?.intensity === 'easy' ? 'RECOVERY' : 'MODERATE';
+            return (
+              <View style={styles.liveStats}>
+                <View style={styles.liveHeader}>
+                  <Text style={styles.livePhase}>
+                    {(phase?.type || 'Active').toUpperCase()} · {workoutStatus.currentPhase + 1}/{workoutStatus.workout?.phases?.length || 0}
+                  </Text>
+                  <Text style={styles.liveIntensity}>{intensity}</Text>
+                </View>
+                <View style={styles.liveRow}>
+                  <View style={styles.liveStat}>
+                    <Text style={styles.liveStatValueSm}>{d.value}</Text>
+                    <Text style={styles.liveStatLabel}>{distLabel}</Text>
+                  </View>
+                  <View style={styles.liveStatDivider} />
+                  <View style={styles.liveStat}>
+                    <Text style={styles.liveStatValueSm}>{formatCountdown(liveStats.elapsedSec)}</Text>
+                    <Text style={styles.liveStatLabel}>TOTAL TIME</Text>
+                  </View>
+                  <View style={styles.liveStatDivider} />
+                  <View style={styles.liveStat}>
+                    <Text style={styles.liveStatValueSm}>{formatCountdown(workoutStatus.phaseTimeRemaining)}</Text>
+                    <Text style={styles.liveStatLabel}>INTERVAL LEFT</Text>
+                  </View>
+                </View>
+                <View style={styles.liveProgress}>
+                  <View style={[styles.liveProgressFill, { width: `${(workoutStatus.phaseProgress || 0) * 100}%` }]} />
+                </View>
+              </View>
+            );
+          }
           return (
             <View style={styles.liveStats}>
-              <View style={styles.liveStat}>
-                <Text style={styles.liveStatValue}>{d.value}</Text>
-                <Text style={styles.liveStatLabel}>{d.unit === 'mi' ? 'MILES' : 'KILOMETERS'}</Text>
-              </View>
-              <View style={styles.liveStatDivider} />
-              <View style={styles.liveStat}>
-                <Text style={styles.liveStatValue}>{formatCountdown(liveStats.elapsedSec)}</Text>
-                <Text style={styles.liveStatLabel}>TIME</Text>
+              <View style={styles.liveRow}>
+                <View style={styles.liveStat}>
+                  <Text style={styles.liveStatValue}>{d.value}</Text>
+                  <Text style={styles.liveStatLabel}>{d.unit === 'mi' ? 'MILES' : 'KILOMETERS'}</Text>
+                </View>
+                <View style={styles.liveStatDivider} />
+                <View style={styles.liveStat}>
+                  <Text style={styles.liveStatValue}>{formatCountdown(liveStats.elapsedSec)}</Text>
+                  <Text style={styles.liveStatLabel}>TIME</Text>
+                </View>
               </View>
             </View>
           );
@@ -1103,34 +1143,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
           </View>
         )}
 
-        {/* Workout Status */}
-        {workoutStatus.active && (
-          <View style={styles.workoutStatus}>
-            <Text style={styles.controlLabel}>WORKOUT STATUS</Text>
-            <View style={styles.statusCard}>
-              <Text style={styles.statusPhase}>
-                Phase {workoutStatus.currentPhase + 1}/{workoutStatus.workout?.phases?.length || 0}
-              </Text>
-              <Text style={styles.statusDescription}>
-                {workoutStatus.phase?.type?.toUpperCase() || 'Active'}
-              </Text>
-              <Text style={styles.statusIntensity}>
-                {workoutStatus.phase?.intensity === 'hard' ? 'HIGH INTENSITY' :
-                 workoutStatus.phase?.intensity === 'easy' ? 'RECOVERY' : 'MODERATE'}
-              </Text>
-              <View style={styles.progressBar}>
-                <View 
-                  style={[styles.progressFill, { 
-                    width: `${(workoutStatus.phaseProgress || 0) * 100}%` 
-                  }]} 
-                />
-              </View>
-              <Text style={styles.statusTime}>
-                {formatCountdown(workoutStatus.phaseTimeRemaining)} remaining
-              </Text>
-            </View>
-          </View>
-        )}
+        {/* Workout Status card merged into the live stats card (Andy 10/11). */}
 
         {/* FORGE-013: mode buttons replaced by the top tabs. */}
         <View style={styles.modeSection}>
@@ -1152,14 +1165,8 @@ export default function MetronomeScreenSimple({ navigation, route }) {
         </View>
 
         {/* Feeling indicator during workout */}
-        {feelingModifier && isPlaying && (
-          <View style={styles.feelingIndicator}>
-            <Text style={styles.feelingIndicatorText}>
-              {feelingModifier.emoji} {feelingModifier.label}
-              {feelingModifier.cadenceOffset !== 0 && ` (${feelingModifier.cadenceOffset > 0 ? '+' : ''}${feelingModifier.cadenceOffset} SPM)`}
-            </Text>
-          </View>
-        )}
+        {/* Feeling badge ("Good to Go" etc.) removed during workouts, Andy 10/11.
+            The check-in answer still adjusts intensity/cadence. */}
       </View>
 
       {/* Pre-workout check-in modal */}
@@ -1483,14 +1490,55 @@ const styles = StyleSheet.create({
     color: '#FFF',
   },
   liveStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#E5E5E5',
     paddingVertical: 16,
+    paddingHorizontal: 12,
     marginBottom: 16,
+  },
+  liveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  liveHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    marginBottom: 14,
+  },
+  livePhase: {
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 15,
+    letterSpacing: 0.5,
+    color: '#0A0A0A',
+  },
+  liveIntensity: {
+    fontFamily: 'Archivo_700Bold',
+    fontSize: 11,
+    letterSpacing: 1.5,
+    color: '#6B6B6B',
+  },
+  liveStatValueSm: {
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 24,
+    color: '#0A0A0A',
+    fontVariant: ['tabular-nums'],
+  },
+  liveProgress: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#E5E5E5',
+    marginTop: 14,
+    marginHorizontal: 6,
+    overflow: 'hidden',
+  },
+  liveProgressFill: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#0A0A0A',
   },
   liveStat: {
     flex: 1,
