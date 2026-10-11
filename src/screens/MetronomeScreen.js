@@ -900,10 +900,15 @@ export default function MetronomeScreenSimple({ navigation, route }) {
             );
             return (
               <View style={styles.liveStats}>
+                {/* Andy 10/11: phase is the card's headline (was a small row he
+                    couldn't find on device). Never blank: 'WORKOUT' fallback. */}
                 <View style={styles.liveHeader}>
-                  <Text style={styles.livePhase}>{phaseTitle}</Text>
-                  <Text style={styles.liveIntensity}>{intensity}</Text>
+                  <Text style={styles.livePhase} numberOfLines={1} adjustsFontSizeToFit>
+                    {phaseTitle || 'WORKOUT'}
+                  </Text>
+                  {!!intensity && <Text style={styles.liveIntensity}>{intensity}</Text>}
                 </View>
+                <View style={styles.liveHeaderRule} />
                 <View style={styles.liveRow}>
                   <View style={styles.liveStat}>
                     <Text style={styles.liveStatValueSm}>{d.value}</Text>
@@ -1529,23 +1534,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   liveHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 6,
-    marginBottom: 14,
   },
   livePhase: {
     fontFamily: 'Archivo_800ExtraBold',
-    fontSize: 15,
+    fontSize: 22,
     letterSpacing: 0.5,
     color: '#0A0A0A',
+    textAlign: 'center',
   },
   liveIntensity: {
     fontFamily: 'Archivo_700Bold',
-    fontSize: 11,
+    fontSize: 12,
     letterSpacing: 1.5,
     color: '#6B6B6B',
+    marginTop: 4,
+  },
+  liveHeaderRule: {
+    height: 1,
+    backgroundColor: '#E5E5E5',
+    marginTop: 12,
+    marginBottom: 14,
+    marginHorizontal: 6,
   },
   liveStatValueSm: {
     fontFamily: 'Archivo_800ExtraBold',

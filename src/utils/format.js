@@ -33,7 +33,7 @@ const PHASE_TAGS = {
 
 /**
  * In-run card header (Andy 10/11). Intervals read as the runner counts them —
- * "INTERVAL 2/5" (work + its rest), WARMUP, COOLDOWN — not raw phase numbers
+ * "INTERVAL 2 OF 5" (work + its rest), WARMUP, COOLDOWN — not raw phase numbers
  * ("1/9" counted warmup/rest/cooldown phases). Fartlek keeps phase n/N.
  */
 export function describePhase(phase, index = 0, total = 0) {
@@ -42,8 +42,8 @@ export function describePhase(phase, index = 0, total = 0) {
   if (intensity === 'warmup') return { title: 'WARMUP', tag };
   if (intensity === 'cooldown') return { title: 'COOLDOWN', tag };
   if (phase?.type === 'interval' && phase?.intervalNumber && phase?.totalIntervals) {
-    return { title: `INTERVAL ${phase.intervalNumber}/${phase.totalIntervals}`, tag };
+    return { title: `INTERVAL ${phase.intervalNumber} OF ${phase.totalIntervals}`, tag };
   }
   const label = phase?.type === 'fartlek' ? 'FARTLEK' : 'PHASE';
-  return { title: total ? `${label} ${index + 1}/${total}` : label, tag };
+  return { title: total ? `${label} ${index + 1} OF ${total}` : label, tag };
 }

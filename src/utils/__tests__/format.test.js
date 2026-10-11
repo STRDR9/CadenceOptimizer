@@ -41,14 +41,14 @@ describe('formatDistance', () => {
 describe('describePhase', () => {
   it('counts intervals, not phases', () => {
     const work = { type: 'interval', intensity: 'work', intervalNumber: 2, totalIntervals: 5 };
-    expect(describePhase(work, 3, 11)).toEqual({ title: 'INTERVAL 2/5', tag: 'WORK' });
-    expect(describePhase({ ...work, intensity: 'rest' }, 4, 11)).toEqual({ title: 'INTERVAL 2/5', tag: 'REST' });
+    expect(describePhase(work, 3, 11)).toEqual({ title: 'INTERVAL 2 OF 5', tag: 'WORK' });
+    expect(describePhase({ ...work, intensity: 'rest' }, 4, 11)).toEqual({ title: 'INTERVAL 2 OF 5', tag: 'REST' });
   });
   it('warmup / cooldown named, no count', () => {
     expect(describePhase({ type: 'interval', intensity: 'warmup' }, 0, 11)).toEqual({ title: 'WARMUP', tag: 'EASY' });
     expect(describePhase({ type: 'interval', intensity: 'cooldown' }, 10, 11)).toEqual({ title: 'COOLDOWN', tag: 'EASY' });
   });
   it('fartlek keeps phase n/N with intensity tag', () => {
-    expect(describePhase({ type: 'fartlek', intensity: 'hard' }, 2, 12)).toEqual({ title: 'FARTLEK 3/12', tag: 'HARD' });
+    expect(describePhase({ type: 'fartlek', intensity: 'hard' }, 2, 12)).toEqual({ title: 'FARTLEK 3 OF 12', tag: 'HARD' });
   });
 });
