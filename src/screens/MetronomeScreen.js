@@ -517,6 +517,11 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       const cadenceOffset = modifier?.cadenceOffset || 0;
       const adjustedCadence = (overrides.cadence ?? cadence) + cadenceOffset;
 
+      // FORGE-014: which TTS voice this device will coach with (selected at
+      // mount by CoachingVoiceService.initialize). null identifier = iOS
+      // system default — the robotic case we're trying to measure.
+      const voiceInfo = CoachingVoiceService.getSelectedVoiceInfo();
+
       analytics.trackFeatureUsage('metronome', 'workout_started', {
         mode: activeMode,
         cadence: adjustedCadence,
@@ -524,6 +529,8 @@ export default function MetronomeScreenSimple({ navigation, route }) {
         audioEnabled: audioEnabled,
         coachingEnabled: coachingEnabled,
         terrain_adjust_enabled: terrainEnabled, // FORGE-009
+        voice_identifier: voiceInfo.identifier || 'system_default', // FORGE-014
+        voice_quality: voiceInfo.quality || 'unknown', // FORGE-014
       });
 
       const startedAt = Date.now();

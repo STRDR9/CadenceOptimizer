@@ -1,12 +1,98 @@
 // Coaching Voice Service
 // Handles text-to-speech for workout coaching
 
-import { speak, stop } from 'expo-speech';
+import { speak, stop, getAvailableVoicesAsync } from 'expo-speech';
+
+// ---------------------------------------------------------------------------
+// Voice selection (FORGE-014). Pure + exported so jest can cover the ranking.
+//
+// iOS ships three quality tiers of system voice: compact (the robotic
+// default), Enhanced, and Premium (near-human, downloadable). The old
+// selection hardcoded compact identifiers FIRST, so devices with better
+// voices installed still got the robotic one. Rank quality first instead.
+// ---------------------------------------------------------------------------
+
+// Natural-sounding female en-US system voices, best first. Matched by name
+// (and identifier) substring, case-insensitive, as a tie-breaker WITHIN a
+// quality tier — never across tiers.
+export const PREFERRED_VOICE_NAMES = ['zoe', 'ava', 'samantha', 'allison', 'susan', 'nicky'];
+
+/**
+ * Classify a voice's quality tier: 'premium' | 'enhanced' | 'default'.
+ * Checks the identifier substring FIRST (com.apple.voice.premium.en-US.Zoe)
+ * because expo-speech's quality enum only models Default/Enhanced — a
+ * Premium voice can come back quality 'Default' and must still outrank.
+ */
+export function voiceQualityTier(voice) {
+  if (!voice) return 'default';
+  const id = String(voice.identifier || '').toLowerCase();
+  const quality = String(voice.quality || '').toLowerCase();
+  if (id.includes('.premium.') || quality === 'premium') return 'premium';
+  if (id.includes('.enhanced.') || quality === 'enhanced') return 'enhanced';
+  return 'default';
+}
+
+const QUALITY_SCORE = { premium: 300, enhanced: 200, default: 100 };
+
+/**
+ * Score one voice. Higher wins; -Infinity means "never pick" (non-English).
+ * Quality tier dominates (100-point bands), then en-US > other English,
+ * then the natural-name preference (max +6, can't cross a band).
+ * Known-robotic families (Eloquence, super-compact, the novelty
+ * com.apple.speech.synthesis voices like Bells/Bad News) are pushed below
+ * every normal voice but stay pickable if literally nothing else is English.
+ */
+export function scoreVoice(voice) {
+  if (!voice || !voice.identifier) return -Infinity;
+  const id = String(voice.identifier).toLowerCase();
+  const language = String(voice.language || '').replace('_', '-');
+  if (!language.toLowerCase().startsWith('en')) return -Infinity;
+
+  let score = QUALITY_SCORE[voiceQualityTier(voice)];
+  score += language === 'en-US' ? 40 : 20;
+
+  const name = String(voice.name || '').toLowerCase();
+  const nameIndex = PREFERRED_VOICE_NAMES.findIndex(
+    (n) => name.includes(n) || id.includes(`.${n}`) || id.endsWith(n)
+  );
+  if (nameIndex >= 0) score += PREFERRED_VOICE_NAMES.length - nameIndex;
+
+  if (
+    id.includes('eloquence') ||
+    id.includes('super-compact') ||
+    id.includes('speech.synthesis.voice')
+  ) {
+    score -= 150;
+  }
+
+  return score;
+}
+
+/**
+ * Pick the best installed voice from an expo-speech voice list.
+ * Returns the winning voice object, or null (= let iOS use its default).
+ * Ties keep the first listed voice (stable).
+ */
+export function pickBestVoice(voices) {
+  if (!Array.isArray(voices)) return null;
+  let best = null;
+  let bestScore = -Infinity;
+  for (const voice of voices) {
+    const score = scoreVoice(voice);
+    if (score > bestScore) {
+      best = voice;
+      bestScore = score;
+    }
+  }
+  return bestScore === -Infinity ? null : best;
+}
 
 export class CoachingVoiceService {
   constructor() {
     this.isEnabled = true;
-    this.rate = 0.95; // Slightly slower for clarity
+    // FORGE-014: 0.9 (was 0.95) — a touch slower reads less synthetic,
+    // especially on compact voices. Wording is untouched by ticket rule.
+    this.rate = 0.9;
     this.pitch = 1.0;
     this.volume = 0.9; // Slightly louder
     this.isInitialized = false;
@@ -19,13 +105,9 @@ export class CoachingVoiceService {
     this.onSpeechEnd = null;
     this.duckActive = false;
     this.platform = 'mobile'; // Default to mobile since we're using expo-speech
-    this.voice = null; // Will be set to best available voice
-    this.preferredVoices = [
-      'com.apple.voice.compact.en-US.Samantha', // Natural female voice
-      'com.apple.ttsbundle.Samantha-compact',   // Enhanced Samantha
-      'com.apple.voice.compact.en-US.Alex',     // Natural male voice
-      'com.apple.ttsbundle.siri_female_en-US_compact', // Siri voice
-    ];
+    this.voice = null; // identifier of the best available voice (null = system default)
+    this.voiceQuality = null; // 'premium' | 'enhanced' | 'default' for the selected voice
+    this.voiceName = null; // human-readable name of the selected voice
   }
 
   /**
@@ -56,34 +138,31 @@ export class CoachingVoiceService {
    */
   async selectBestVoice() {
     try {
-      // Import getAvailableVoicesAsync from expo-speech
-      const { getAvailableVoicesAsync } = await import('expo-speech');
-      
       if (getAvailableVoicesAsync && typeof getAvailableVoicesAsync === 'function') {
         const voices = await getAvailableVoicesAsync();
-        
-        // Try to find one of our preferred voices
-        for (const preferredVoice of this.preferredVoices) {
-          const found = voices.find(v => v.identifier === preferredVoice);
-          if (found) {
-            this.voice = found.identifier;
-            return;
-          }
-        }
-        
-        // Fallback: find any high-quality English voice
-        const enVoice = voices.find(v => 
-          v.language.startsWith('en') && 
-          (v.quality === 'Enhanced' || v.quality === 'Premium')
-        );
-        
-        if (enVoice) {
-          this.voice = enVoice.identifier;
+        const best = pickBestVoice(voices);
+        if (best) {
+          this.voice = best.identifier;
+          this.voiceQuality = voiceQualityTier(best);
+          this.voiceName = best.name || null;
         }
       }
     } catch (_error) {
       // Could not get available voices, using default
     }
+  }
+
+  /**
+   * What voice this device will actually coach with (FORGE-014) — logged on
+   * workout_started so analytics can say which quality tier users really get.
+   * identifier null = iOS system default (selection unavailable/failed).
+   */
+  getSelectedVoiceInfo() {
+    return {
+      identifier: this.voice || null,
+      quality: this.voice ? this.voiceQuality : null,
+      name: this.voice ? this.voiceName : null,
+    };
   }
 
   /**
@@ -302,9 +381,11 @@ export class CoachingVoiceService {
     // Adjust voice parameters based on cue type for more natural delivery
     switch (cue.type) {
       case 'motivation':
-        // Energetic and encouraging
-        options.rate = 1.05;
-        options.pitch = 1.05;
+        // Energetic and encouraging. FORGE-014: was 1.05/1.05 — pushing a
+        // synthetic voice faster AND higher is the single biggest "robot
+        // tell"; keep the energy in volume, not speed/pitch.
+        options.rate = 1.0;
+        options.pitch = 1.02;
         options.volume = 1.0;
         break;
       case 'instruction':
@@ -326,8 +407,8 @@ export class CoachingVoiceService {
         options.volume = 0.9;
         break;
       default:
-        // Neutral delivery
-        options.rate = 0.95;
+        // Neutral delivery (matches the FORGE-014 base rate)
+        options.rate = 0.9;
         options.pitch = 1.0;
         options.volume = 0.9;
     }
@@ -345,7 +426,8 @@ export class CoachingVoiceService {
       isSpeaking: this.isSpeaking,
       platform: this.platform,
       queueLength: this.speechQueue.length,
-      voice: 'Default',
+      voice: this.voice || 'Default',
+      voiceQuality: this.voice ? this.voiceQuality : null,
       rate: this.rate,
       pitch: this.pitch,
       volume: this.volume,
