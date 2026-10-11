@@ -272,13 +272,15 @@ export class WorkoutEngine {
     let currentTime = 0;
 
     // Warmup phase
+    // Andy 10/11: warmup/cooldown run at the REST cadence the user set — the
+    // old hidden "rest - 5" made a 160 rest start the run at 155.
     phases.push({
       id: phases.length,
-      cadence: Math.round(restCadence - 5),
+      cadence: Math.round(restCadence),
       duration: warmupDuration,
       intensity: 'warmup',
       type: 'interval',
-      coachingCues: this.generateIntervalCoachingCues('warmup', restCadence - 5, 0, coachingEnabled),
+      coachingCues: this.generateIntervalCoachingCues('warmup', restCadence, 0, coachingEnabled),
       terrainAdjustment: config.terrainAware,
     });
     currentTime += warmupDuration;
@@ -319,11 +321,11 @@ export class WorkoutEngine {
     // Cooldown phase
     phases.push({
       id: phases.length,
-      cadence: Math.round(restCadence - 5),
+      cadence: Math.round(restCadence),
       duration: cooldownDuration,
       intensity: 'cooldown',
       type: 'interval',
-      coachingCues: this.generateIntervalCoachingCues('cooldown', restCadence - 5, 0, coachingEnabled),
+      coachingCues: this.generateIntervalCoachingCues('cooldown', restCadence, 0, coachingEnabled),
       terrainAdjustment: config.terrainAware,
     });
     currentTime += cooldownDuration;

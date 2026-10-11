@@ -18,7 +18,7 @@ import StepCadenceService, {
 import PostWorkoutSummary, { defaultUnitsFromLocale } from '../components/PostWorkoutSummary';
 import SpotifyPlaylistBuilder from '../components/SpotifyPlaylistBuilder';
 import { getRunnerProfile, saveWorkoutToHistory, getRunScreenPrefs, saveRunScreenPrefs } from '../utils/storage';
-import { formatCountdown, formatDistance } from '../utils/format';
+import { formatCountdown, formatDistance, describePhase } from '../utils/format';
 import { buildSplitAnnouncement } from '../utils/splitAnnouncement';
 import { getQuickStartCadence } from '../services/cadenceModel';
 
@@ -585,9 +585,14 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       await startLocationTracking();
       stepTrackingRef.current = await StepCadenceService.start(handleCadenceSample);
 
+      // Andy 10/11: intervals open on the warmup = rest cadence he set, not
+      // whatever the metronome dial happened to show.
+      const openingCadence = activeMode === 'interval'
+        ? Math.round(intervalConfig.restCadence + cadenceOffset)
+        : adjustedCadence;
       setIsPlaying(true);
-      setCadence(adjustedCadence);
-      await MetronomeService.start(adjustedCadence, stableHandleBeat, volume, audioEnabled);
+      setCadence(openingCadence);
+      await MetronomeService.start(openingCadence, stableHandleBeat, volume, audioEnabled);
 
       if (activeMode === 'fartlek') {
         await WorkoutEngine.startFartlek({
@@ -882,14 +887,13 @@ export default function MetronomeScreenSimple({ navigation, route }) {
           const distLabel = d.unit === 'mi' ? 'MILES' : 'KM';
           if (workoutStatus.active) {
             const phase = workoutStatus.phase;
-            const intensity = phase?.intensity === 'hard' ? 'HIGH INTENSITY'
-              : phase?.intensity === 'easy' ? 'RECOVERY' : 'MODERATE';
+            const { title: phaseTitle, tag: intensity } = describePhase(
+              phase, workoutStatus.currentPhase, workoutStatus.workout?.phases?.length || 0
+            );
             return (
               <View style={styles.liveStats}>
                 <View style={styles.liveHeader}>
-                  <Text style={styles.livePhase}>
-                    {(phase?.type || 'Active').toUpperCase()} · {workoutStatus.currentPhase + 1}/{workoutStatus.workout?.phases?.length || 0}
-                  </Text>
+                  <Text style={styles.livePhase}>{phaseTitle}</Text>
                   <Text style={styles.liveIntensity}>{intensity}</Text>
                 </View>
                 <View style={styles.liveRow}>
@@ -1012,7 +1016,13 @@ export default function MetronomeScreenSimple({ navigation, route }) {
 
         {/* Mode-Specific Configuration */}
         {mode === 'fartlek' && (
-          <View style={styles.configSection}>
+          <View
+            style={[styles.configSection, workoutActive && styles.configLocked]}
+            pointerEvents={workoutActive ? 'none' : 'auto'}
+          >
+            {workoutActive && (
+              <Text style={styles.configLockedNote}>LOCKED DURING WORKOUT — END THE RUN TO CHANGE</Text>
+            )}
             <Text style={styles.controlLabel}>FARTLEK CONFIGURATION</Text>
             
             <View style={styles.difficultySection}>
@@ -1043,7 +1053,13 @@ export default function MetronomeScreenSimple({ navigation, route }) {
         )}
 
         {mode === 'interval' && (
-          <View style={styles.configSection}>
+          <View
+            style={[styles.configSection, workoutActive && styles.configLocked]}
+            pointerEvents={workoutActive ? 'none' : 'auto'}
+          >
+            {workoutActive && (
+              <Text style={styles.configLockedNote}>LOCKED DURING WORKOUT — END THE RUN TO CHANGE</Text>
+            )}
             <Text style={styles.controlLabel}>INTERVAL CONFIGURATION</Text>
             
             <View style={styles.intervalGrid}>
@@ -1614,6 +1630,17 @@ const styles = StyleSheet.create({
   },
   modeButtonDescActive: {
     color: '#B0B0B0',
+  },
+  configLocked: {
+    opacity: 0.45,
+  },
+  configLockedNote: {
+    fontFamily: 'Archivo_700Bold',
+    fontSize: 11,
+    letterSpacing: 1.2,
+    color: '#0A0A0A',
+    textAlign: 'center',
+    marginBottom: 12,
   },
   configSection: {
     borderRadius: 14,
