@@ -18,7 +18,7 @@ import StepCadenceService, {
 import PostWorkoutSummary, { defaultUnitsFromLocale } from '../components/PostWorkoutSummary';
 import SpotifyPlaylistBuilder from '../components/SpotifyPlaylistBuilder';
 import { getRunnerProfile, saveWorkoutToHistory, getRunScreenPrefs, saveRunScreenPrefs } from '../utils/storage';
-import { formatCountdown } from '../utils/format';
+import { formatCountdown, formatDistance } from '../utils/format';
 import { buildSplitAnnouncement } from '../utils/splitAnnouncement';
 import { getQuickStartCadence } from '../services/cadenceModel';
 
@@ -112,6 +112,37 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   const bgAccumMsRef = useRef(0);
   const bgSinceRef = useRef(null);
   const workoutStartRef = useRef(null); // ms mirror of workoutStartTime for callbacks
+  // Live in-run stats (Andy 10/11): distance + elapsed, every tab. Polled
+  // once a second from RouteTracker's running total while a workout is on.
+  // TIME = active time: PAUSE freezes the clock (workout stays alive).
+  const [liveStats, setLiveStats] = useState({ meters: 0, elapsedSec: 0 });
+  const activeMsRef = useRef(0); // banked active time from earlier segments
+  const segmentStartRef = useRef(null); // start of the current playing segment
+  useEffect(() => {
+    if (!workoutActive) {
+      activeMsRef.current = 0;
+      segmentStartRef.current = null;
+      setLiveStats({ meters: 0, elapsedSec: 0 });
+      return undefined;
+    }
+    if (isPlaying && segmentStartRef.current == null) {
+      segmentStartRef.current = Date.now();
+    } else if (!isPlaying && segmentStartRef.current != null) {
+      activeMsRef.current += Date.now() - segmentStartRef.current;
+      segmentStartRef.current = null;
+    }
+    const tick = () => {
+      const seg = segmentStartRef.current;
+      const activeMs = activeMsRef.current + (seg != null ? Date.now() - seg : 0);
+      setLiveStats({
+        meters: RouteTracker.getLiveDistance(),
+        elapsedSec: activeMs / 1000,
+      });
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [workoutActive, isPlaying]);
   // FORGE-009c: location mode/error captured AT START — reading
   // LocationService.trackingMode after stopLocationTracking() always gave
   // 'none' (field test #2's useless diagnostic).
@@ -842,6 +873,24 @@ export default function MetronomeScreenSimple({ navigation, route }) {
           </Text>
         </View>
 
+        {/* Live in-run stats (Andy 10/11) — every tab, only during a workout */}
+        {workoutActive && (() => {
+          const d = formatDistance(liveStats.meters, profileUnits === 'imperial' ? 'imperial' : 'metric');
+          return (
+            <View style={styles.liveStats}>
+              <View style={styles.liveStat}>
+                <Text style={styles.liveStatValue}>{d.value}</Text>
+                <Text style={styles.liveStatLabel}>{d.unit === 'mi' ? 'MILES' : 'KILOMETERS'}</Text>
+              </View>
+              <View style={styles.liveStatDivider} />
+              <View style={styles.liveStat}>
+                <Text style={styles.liveStatValue}>{formatCountdown(liveStats.elapsedSec)}</Text>
+                <Text style={styles.liveStatLabel}>TIME</Text>
+              </View>
+            </View>
+          );
+        })()}
+
         {/* Start/Pause Button */}
         <TouchableOpacity 
           style={[styles.playButton, isPlaying && styles.playButtonActive]}
@@ -1432,6 +1481,38 @@ const styles = StyleSheet.create({
   },
   topTabTextActive: {
     color: '#FFF',
+  },
+  liveStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    paddingVertical: 16,
+    marginBottom: 16,
+  },
+  liveStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  liveStatValue: {
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 32,
+    color: '#0A0A0A',
+    fontVariant: ['tabular-nums'],
+  },
+  liveStatLabel: {
+    fontFamily: 'Archivo_700Bold',
+    fontSize: 11,
+    letterSpacing: 1.5,
+    color: '#6B6B6B',
+    marginTop: 2,
+  },
+  liveStatDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: '#E5E5E5',
   },
   voiceToggle: {
     flexDirection: 'row',

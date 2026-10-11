@@ -1,5 +1,5 @@
 // FORGE-013: m:ss countdown formatting (Bridget: raw seconds read terribly).
-import { formatCountdown } from '../format';
+import { formatCountdown, formatDistance } from '../format';
 
 describe('formatCountdown', () => {
   it('formats seconds as m:ss', () => {
@@ -21,5 +21,19 @@ describe('formatCountdown', () => {
     expect(formatCountdown(-5)).toBe('0:00');
     expect(formatCountdown(NaN)).toBe('0:00');
     expect(formatCountdown(undefined)).toBe('0:00');
+  });
+});
+
+describe('formatDistance', () => {
+  it('miles with two decimals', () => {
+    expect(formatDistance(1609.344, 'imperial')).toEqual({ value: '1.00', unit: 'mi' });
+    expect(formatDistance(3765.865, 'imperial')).toEqual({ value: '2.34', unit: 'mi' });
+  });
+  it('kilometers', () => {
+    expect(formatDistance(3770, 'metric')).toEqual({ value: '3.77', unit: 'km' });
+  });
+  it('clamps garbage to zero', () => {
+    expect(formatDistance(undefined)).toEqual({ value: '0.00', unit: 'mi' });
+    expect(formatDistance(-50, 'metric')).toEqual({ value: '0.00', unit: 'km' });
   });
 });
