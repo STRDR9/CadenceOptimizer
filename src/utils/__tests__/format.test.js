@@ -48,7 +48,10 @@ describe('describePhase', () => {
     expect(describePhase({ type: 'interval', intensity: 'warmup' }, 0, 11)).toEqual({ title: 'WARMUP', tag: 'EASY' });
     expect(describePhase({ type: 'interval', intensity: 'cooldown' }, 10, 11)).toEqual({ title: 'COOLDOWN', tag: 'EASY' });
   });
-  it('fartlek keeps phase n/N with intensity tag', () => {
-    expect(describePhase({ type: 'fartlek', intensity: 'hard' }, 2, 12)).toEqual({ title: 'FARTLEK 3 OF 12', tag: 'HARD' });
+  it('fartlek counts surges, not warmup/cooldown', () => {
+    // 12 phases = warmup + 10 surges + cooldown
+    expect(describePhase({ type: 'fartlek', intensity: 'hard' }, 1, 12)).toEqual({ title: 'FARTLEK 1 OF 10', tag: 'HARD' });
+    expect(describePhase({ type: 'fartlek', intensity: 'easy' }, 10, 12)).toEqual({ title: 'FARTLEK 10 OF 10', tag: 'EASY' });
+    expect(describePhase({ type: 'fartlek', intensity: 'warmup' }, 0, 12)).toEqual({ title: 'WARMUP', tag: 'EASY' });
   });
 });

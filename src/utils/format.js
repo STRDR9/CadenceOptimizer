@@ -44,6 +44,12 @@ export function describePhase(phase, index = 0, total = 0) {
   if (phase?.type === 'interval' && phase?.intervalNumber && phase?.totalIntervals) {
     return { title: `INTERVAL ${phase.intervalNumber} OF ${phase.totalIntervals}`, tag };
   }
-  const label = phase?.type === 'fartlek' ? 'FARTLEK' : 'PHASE';
-  return { title: total ? `${label} ${index + 1} OF ${total}` : label, tag };
+  if (phase?.type === 'fartlek') {
+    // Fartlek always opens with warmup (index 0) and ends with cooldown, so
+    // the runner's surge count excludes both: index 1 -> "1 OF total-2".
+    const n = Math.max(1, index);
+    const of = Math.max(n, total - 2);
+    return { title: total ? `FARTLEK ${n} OF ${of}` : 'FARTLEK', tag };
+  }
+  return { title: total ? `PHASE ${index + 1} OF ${total}` : 'PHASE', tag };
 }
