@@ -115,14 +115,19 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   // Live in-run stats (Andy 10/11): distance + elapsed, every tab. Polled
   // once a second from RouteTracker's running total while a workout is on.
   // TIME = active time: PAUSE freezes the clock (workout stays alive).
-  const [liveStats, setLiveStats] = useState({ meters: 0, elapsedSec: 0 });
+  const [liveStats, setLiveStats] = useState({ meters: 0, elapsedSec: 0, phaseLeftSec: null });
+  // Andy 10/11: TOTAL TIME and INTERVAL LEFT must flip on the same second.
+  // Both now come from one integer active-time clock: interval left =
+  // phase length - (whole seconds since this phase began on that clock).
+  const phaseClockRef = useRef({ index: -1, startSec: 0 });
   const activeMsRef = useRef(0); // banked active time from earlier segments
   const segmentStartRef = useRef(null); // start of the current playing segment
   useEffect(() => {
     if (!workoutActive) {
       activeMsRef.current = 0;
       segmentStartRef.current = null;
-      setLiveStats({ meters: 0, elapsedSec: 0 });
+      phaseClockRef.current = { index: -1, startSec: 0 };
+      setLiveStats({ meters: 0, elapsedSec: 0, phaseLeftSec: null });
       return undefined;
     }
     if (isPlaying && segmentStartRef.current == null) {
@@ -134,10 +139,20 @@ export default function MetronomeScreenSimple({ navigation, route }) {
     const tick = () => {
       const seg = segmentStartRef.current;
       const activeMs = activeMsRef.current + (seg != null ? Date.now() - seg : 0);
-      setLiveStats({
-        meters: RouteTracker.getLiveDistance(),
-        elapsedSec: activeMs / 1000,
-      });
+      const elapsedSec = Math.floor(activeMs / 1000); // whole seconds, stopwatch-style
+      let phaseLeftSec = null;
+      const st = WorkoutEngine.getStatus();
+      if (st.active && st.phase) {
+        if (st.currentPhase !== phaseClockRef.current.index) {
+          phaseClockRef.current = { index: st.currentPhase, startSec: elapsedSec };
+        }
+        phaseLeftSec = Math.max(
+          0,
+          Math.round(st.phase.duration) - (elapsedSec - phaseClockRef.current.startSec)
+        );
+        setWorkoutStatus(st); // same tick as the clocks -> header/progress in step too
+      }
+      setLiveStats({ meters: RouteTracker.getLiveDistance(), elapsedSec, phaseLeftSec });
     };
     tick();
     const id = setInterval(tick, 1000);
@@ -355,13 +370,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       setCoachingEnabled(prefs.coachingEnabled !== false);
     });
 
-    // Update workout status every second when active
-    const statusInterval = setInterval(() => {
-      const status = WorkoutEngine.getStatus();
-      if (status.active) {
-        setWorkoutStatus(status);
-      }
-    }, 1000);
+    // (Workout status now refreshes on the live-stats tick — one clock, Andy 10/11.)
 
     
     return () => {
@@ -370,7 +379,6 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       CoachingVoiceService.stopSpeaking();
       stopLocationTracking();
       StepCadenceService.stop();
-      clearInterval(statusInterval);
       if (cueBannerTimer.current) clearTimeout(cueBannerTimer.current);
     };
     // Deliberate mount-once effect: stableCallbacks is a fresh object each
@@ -908,7 +916,9 @@ export default function MetronomeScreenSimple({ navigation, route }) {
                   </View>
                   <View style={styles.liveStatDivider} />
                   <View style={styles.liveStat}>
-                    <Text style={styles.liveStatValueSm}>{formatCountdown(workoutStatus.phaseTimeRemaining)}</Text>
+                    <Text style={styles.liveStatValueSm}>{formatCountdown(
+                      liveStats.phaseLeftSec ?? workoutStatus.phaseTimeRemaining
+                    )}</Text>
                     <Text style={styles.liveStatLabel}>INTERVAL LEFT</Text>
                   </View>
                 </View>
