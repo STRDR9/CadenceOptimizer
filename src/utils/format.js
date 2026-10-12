@@ -53,3 +53,18 @@ export function describePhase(phase, index = 0, total = 0) {
   }
   return { title: total ? `PHASE ${index + 1} OF ${total}` : 'PHASE', tag };
 }
+
+/** Profile is stored metric (cm / kg); show height in the runner's units.
+ *  Imperial -> 5'10" (Andy 10/11: Home card always said CM). */
+export function formatHeight(profile) {
+  const cm = Math.max(0, Number(profile?.height) || 0);
+  if (profile?.units !== 'imperial') return `${Math.round(cm)}`;
+  const totalIn = Math.round(cm / 2.54);
+  return `${Math.floor(totalIn / 12)}'${totalIn % 12}\"`;
+}
+
+/** kg -> lb for imperial profiles, rounded. */
+export function formatWeight(profile) {
+  const kg = Math.max(0, Number(profile?.weight) || 0);
+  return profile?.units === 'imperial' ? `${Math.round(kg * 2.20462)}` : `${Math.round(kg)}`;
+}
