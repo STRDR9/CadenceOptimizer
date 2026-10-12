@@ -124,6 +124,12 @@ export class RouteTracker {
     return R * c;
   }
 
+  // Live distance for the in-run stats strip — the running total addPoint
+  // already maintains (O(1), unlike getTotalDistance which re-walks points).
+  getLiveDistance() {
+    return this.cumulativeDistance || 0;
+  }
+
   // Total distance in meters
   getTotalDistance() {
     let total = 0;

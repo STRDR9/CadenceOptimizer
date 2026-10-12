@@ -4,7 +4,6 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 const FEELING_OPTIONS = [
   {
     key: 'great',
-    emoji: '🔥',
     label: 'Feeling Great',
     desc: 'Well rested, ready to push',
     intensityMultiplier: 1.05,
@@ -12,7 +11,6 @@ const FEELING_OPTIONS = [
   },
   {
     key: 'good',
-    emoji: '👍',
     label: 'Good to Go',
     desc: 'Normal energy, solid day',
     intensityMultiplier: 1.0,
@@ -20,7 +18,6 @@ const FEELING_OPTIONS = [
   },
   {
     key: 'tired',
-    emoji: '😮‍💨',
     label: 'A Bit Tired',
     desc: 'Low energy, take it easy',
     intensityMultiplier: 0.92,
@@ -28,7 +25,6 @@ const FEELING_OPTIONS = [
   },
   {
     key: 'recovering',
-    emoji: '🩹',
     label: 'Recovering',
     desc: 'Post-race, sick, or injured',
     intensityMultiplier: 0.85,
@@ -57,7 +53,6 @@ export default function PreWorkoutCheckIn({ visible, onSelect, onSkip }) {
               accessibilityLabel={`${option.label}: ${option.desc}`}
               accessibilityRole="button"
             >
-              <Text style={styles.emoji}>{option.emoji}</Text>
               <View style={styles.optionText}>
                 <Text style={styles.optionLabel}>{option.label}</Text>
                 <Text style={styles.optionDesc}>{option.desc}</Text>
@@ -80,29 +75,29 @@ export { FEELING_OPTIONS };
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   card: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 24,
     width: '100%',
     maxWidth: 360,
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: '#E5E5E5',
   },
   title: {
-    color: '#fff',
+    color: '#0A0A0A',
+    fontFamily: 'Archivo_800ExtraBold',
     fontSize: 22,
-    fontWeight: '700',
     textAlign: 'center',
     marginBottom: 4,
   },
   subtitle: {
-    color: '#888',
+    color: '#6B6B6B',
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 20,
@@ -110,27 +105,23 @@ const styles = StyleSheet.create({
   optionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#16213e',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#2a2a4a',
-  },
-  emoji: {
-    fontSize: 28,
-    marginRight: 14,
+    borderColor: '#E5E5E5',
   },
   optionText: {
     flex: 1,
   },
   optionLabel: {
-    color: '#fff',
+    color: '#0A0A0A',
+    fontFamily: 'Archivo_700Bold',
     fontSize: 16,
-    fontWeight: '600',
   },
   optionDesc: {
-    color: '#888',
+    color: '#6B6B6B',
     fontSize: 13,
     marginTop: 2,
   },
@@ -140,7 +131,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   skipText: {
-    color: '#666',
+    color: '#6B6B6B',
     fontSize: 14,
   },
 });

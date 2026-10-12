@@ -1,5 +1,5 @@
 // FORGE-013: m:ss countdown formatting (Bridget: raw seconds read terribly).
-import { formatCountdown } from '../format';
+import { formatCountdown, formatDistance, describePhase } from '../format';
 
 describe('formatCountdown', () => {
   it('formats seconds as m:ss', () => {
@@ -21,5 +21,37 @@ describe('formatCountdown', () => {
     expect(formatCountdown(-5)).toBe('0:00');
     expect(formatCountdown(NaN)).toBe('0:00');
     expect(formatCountdown(undefined)).toBe('0:00');
+  });
+});
+
+describe('formatDistance', () => {
+  it('miles with two decimals', () => {
+    expect(formatDistance(1609.344, 'imperial')).toEqual({ value: '1.00', unit: 'mi' });
+    expect(formatDistance(3765.865, 'imperial')).toEqual({ value: '2.34', unit: 'mi' });
+  });
+  it('kilometers', () => {
+    expect(formatDistance(3770, 'metric')).toEqual({ value: '3.77', unit: 'km' });
+  });
+  it('clamps garbage to zero', () => {
+    expect(formatDistance(undefined)).toEqual({ value: '0.00', unit: 'mi' });
+    expect(formatDistance(-50, 'metric')).toEqual({ value: '0.00', unit: 'km' });
+  });
+});
+
+describe('describePhase', () => {
+  it('counts intervals, not phases', () => {
+    const work = { type: 'interval', intensity: 'work', intervalNumber: 2, totalIntervals: 5 };
+    expect(describePhase(work, 3, 11)).toEqual({ title: 'INTERVAL 2 OF 5', tag: 'WORK' });
+    expect(describePhase({ ...work, intensity: 'rest' }, 4, 11)).toEqual({ title: 'INTERVAL 2 OF 5', tag: 'REST' });
+  });
+  it('warmup / cooldown named, no count', () => {
+    expect(describePhase({ type: 'interval', intensity: 'warmup' }, 0, 11)).toEqual({ title: 'WARMUP', tag: 'EASY' });
+    expect(describePhase({ type: 'interval', intensity: 'cooldown' }, 10, 11)).toEqual({ title: 'COOLDOWN', tag: 'EASY' });
+  });
+  it('fartlek counts surges, not warmup/cooldown', () => {
+    // 12 phases = warmup + 10 surges + cooldown
+    expect(describePhase({ type: 'fartlek', intensity: 'hard' }, 1, 12)).toEqual({ title: 'FARTLEK 1 OF 10', tag: 'HARD' });
+    expect(describePhase({ type: 'fartlek', intensity: 'easy' }, 10, 12)).toEqual({ title: 'FARTLEK 10 OF 10', tag: 'EASY' });
+    expect(describePhase({ type: 'fartlek', intensity: 'warmup' }, 0, 12)).toEqual({ title: 'WARMUP', tag: 'EASY' });
   });
 });

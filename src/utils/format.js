@@ -14,3 +14,42 @@ export function formatCountdown(seconds) {
   }
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
+
+/**
+ * Live in-run distance (Andy 10/11). meters -> { value, unit } with two
+ * decimals ("2.34" mi / "3.77" km). Garbage/negative clamps to 0.00.
+ */
+export function formatDistance(meters, units = 'imperial') {
+  const m = Math.max(0, Number(meters) || 0);
+  const imperial = units === 'imperial';
+  const value = imperial ? m / 1609.344 : m / 1000;
+  return { value: value.toFixed(2), unit: imperial ? 'mi' : 'km' };
+}
+
+const PHASE_TAGS = {
+  work: 'WORK', rest: 'REST', warmup: 'EASY', cooldown: 'EASY',
+  hard: 'HARD', moderate: 'MODERATE', easy: 'EASY', base: 'STEADY',
+};
+
+/**
+ * In-run card header (Andy 10/11). Intervals read as the runner counts them —
+ * "INTERVAL 2 OF 5" (work + its rest), WARMUP, COOLDOWN — not raw phase numbers
+ * ("1/9" counted warmup/rest/cooldown phases). Fartlek keeps phase n/N.
+ */
+export function describePhase(phase, index = 0, total = 0) {
+  const intensity = phase?.intensity;
+  const tag = PHASE_TAGS[intensity] || 'MODERATE';
+  if (intensity === 'warmup') return { title: 'WARMUP', tag };
+  if (intensity === 'cooldown') return { title: 'COOLDOWN', tag };
+  if (phase?.type === 'interval' && phase?.intervalNumber && phase?.totalIntervals) {
+    return { title: `INTERVAL ${phase.intervalNumber} OF ${phase.totalIntervals}`, tag };
+  }
+  if (phase?.type === 'fartlek') {
+    // Fartlek always opens with warmup (index 0) and ends with cooldown, so
+    // the runner's surge count excludes both: index 1 -> "1 OF total-2".
+    const n = Math.max(1, index);
+    const of = Math.max(n, total - 2);
+    return { title: total ? `FARTLEK ${n} OF ${of}` : 'FARTLEK', tag };
+  }
+  return { title: total ? `PHASE ${index + 1} OF ${total}` : 'PHASE', tag };
+}

@@ -18,7 +18,7 @@ import StepCadenceService, {
 import PostWorkoutSummary, { defaultUnitsFromLocale } from '../components/PostWorkoutSummary';
 import SpotifyPlaylistBuilder from '../components/SpotifyPlaylistBuilder';
 import { getRunnerProfile, saveWorkoutToHistory, getRunScreenPrefs, saveRunScreenPrefs } from '../utils/storage';
-import { formatCountdown } from '../utils/format';
+import { formatCountdown, formatDistance, describePhase } from '../utils/format';
 import { buildSplitAnnouncement } from '../utils/splitAnnouncement';
 import { getQuickStartCadence } from '../services/cadenceModel';
 
@@ -112,6 +112,52 @@ export default function MetronomeScreenSimple({ navigation, route }) {
   const bgAccumMsRef = useRef(0);
   const bgSinceRef = useRef(null);
   const workoutStartRef = useRef(null); // ms mirror of workoutStartTime for callbacks
+  // Live in-run stats (Andy 10/11): distance + elapsed, every tab. Polled
+  // once a second from RouteTracker's running total while a workout is on.
+  // TIME = active time: PAUSE freezes the clock (workout stays alive).
+  const [liveStats, setLiveStats] = useState({ meters: 0, elapsedSec: 0, phaseLeftSec: null });
+  // Andy 10/11: TOTAL TIME and INTERVAL LEFT must flip on the same second.
+  // Both now come from one integer active-time clock: interval left =
+  // phase length - (whole seconds since this phase began on that clock).
+  const phaseClockRef = useRef({ index: -1, startSec: 0 });
+  const activeMsRef = useRef(0); // banked active time from earlier segments
+  const segmentStartRef = useRef(null); // start of the current playing segment
+  useEffect(() => {
+    if (!workoutActive) {
+      activeMsRef.current = 0;
+      segmentStartRef.current = null;
+      phaseClockRef.current = { index: -1, startSec: 0 };
+      setLiveStats({ meters: 0, elapsedSec: 0, phaseLeftSec: null });
+      return undefined;
+    }
+    if (isPlaying && segmentStartRef.current == null) {
+      segmentStartRef.current = Date.now();
+    } else if (!isPlaying && segmentStartRef.current != null) {
+      activeMsRef.current += Date.now() - segmentStartRef.current;
+      segmentStartRef.current = null;
+    }
+    const tick = () => {
+      const seg = segmentStartRef.current;
+      const activeMs = activeMsRef.current + (seg != null ? Date.now() - seg : 0);
+      const elapsedSec = Math.floor(activeMs / 1000); // whole seconds, stopwatch-style
+      let phaseLeftSec = null;
+      const st = WorkoutEngine.getStatus();
+      if (st.active && st.phase) {
+        if (st.currentPhase !== phaseClockRef.current.index) {
+          phaseClockRef.current = { index: st.currentPhase, startSec: elapsedSec };
+        }
+        phaseLeftSec = Math.max(
+          0,
+          Math.round(st.phase.duration) - (elapsedSec - phaseClockRef.current.startSec)
+        );
+        setWorkoutStatus(st); // same tick as the clocks -> header/progress in step too
+      }
+      setLiveStats({ meters: RouteTracker.getLiveDistance(), elapsedSec, phaseLeftSec });
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [workoutActive, isPlaying]);
   // FORGE-009c: location mode/error captured AT START — reading
   // LocationService.trackingMode after stopLocationTracking() always gave
   // 'none' (field test #2's useless diagnostic).
@@ -324,13 +370,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       setCoachingEnabled(prefs.coachingEnabled !== false);
     });
 
-    // Update workout status every second when active
-    const statusInterval = setInterval(() => {
-      const status = WorkoutEngine.getStatus();
-      if (status.active) {
-        setWorkoutStatus(status);
-      }
-    }, 1000);
+    // (Workout status now refreshes on the live-stats tick — one clock, Andy 10/11.)
 
     
     return () => {
@@ -339,7 +379,6 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       CoachingVoiceService.stopSpeaking();
       stopLocationTracking();
       StepCadenceService.stop();
-      clearInterval(statusInterval);
       if (cueBannerTimer.current) clearTimeout(cueBannerTimer.current);
     };
     // Deliberate mount-once effect: stableCallbacks is a fresh object each
@@ -554,9 +593,14 @@ export default function MetronomeScreenSimple({ navigation, route }) {
       await startLocationTracking();
       stepTrackingRef.current = await StepCadenceService.start(handleCadenceSample);
 
+      // Andy 10/11: intervals open on the warmup = rest cadence he set, not
+      // whatever the metronome dial happened to show.
+      const openingCadence = activeMode === 'interval'
+        ? Math.round(intervalConfig.restCadence + cadenceOffset)
+        : adjustedCadence;
       setIsPlaying(true);
-      setCadence(adjustedCadence);
-      await MetronomeService.start(adjustedCadence, stableHandleBeat, volume, audioEnabled);
+      setCadence(openingCadence);
+      await MetronomeService.start(openingCadence, stableHandleBeat, volume, audioEnabled);
 
       if (activeMode === 'fartlek') {
         await WorkoutEngine.startFartlek({
@@ -842,6 +886,70 @@ export default function MetronomeScreenSimple({ navigation, route }) {
           </Text>
         </View>
 
+        {/* Live in-run stats (Andy 10/11) — every tab, only during a workout.
+            Intervals/Fartlek: ONE card = phase + distance + total time +
+            time left in the interval (replaces the separate Workout Status
+            card). Run tab: distance + time. */}
+        {workoutActive && (() => {
+          const d = formatDistance(liveStats.meters, profileUnits === 'imperial' ? 'imperial' : 'metric');
+          const distLabel = d.unit === 'mi' ? 'MILES' : 'KM';
+          if (workoutStatus.active) {
+            const phase = workoutStatus.phase;
+            const { title: phaseTitle, tag: intensity } = describePhase(
+              phase, workoutStatus.currentPhase, workoutStatus.workout?.phases?.length || 0
+            );
+            return (
+              <View style={styles.liveStats}>
+                {/* Andy 10/11: phase is the card's headline (was a small row he
+                    couldn't find on device). Never blank: 'WORKOUT' fallback. */}
+                <View style={styles.liveHeader}>
+                  <Text style={styles.livePhase} numberOfLines={1} adjustsFontSizeToFit>
+                    {phaseTitle || 'WORKOUT'}
+                  </Text>
+                  {!!intensity && <Text style={styles.liveIntensity}>{intensity}</Text>}
+                </View>
+                <View style={styles.liveHeaderRule} />
+                <View style={styles.liveRow}>
+                  <View style={styles.liveStat}>
+                    <Text style={styles.liveStatValueSm}>{d.value}</Text>
+                    <Text style={styles.liveStatLabel}>{distLabel}</Text>
+                  </View>
+                  <View style={styles.liveStatDivider} />
+                  <View style={styles.liveStat}>
+                    <Text style={styles.liveStatValueSm}>{formatCountdown(liveStats.elapsedSec)}</Text>
+                    <Text style={styles.liveStatLabel}>TOTAL TIME</Text>
+                  </View>
+                  <View style={styles.liveStatDivider} />
+                  <View style={styles.liveStat}>
+                    <Text style={styles.liveStatValueSm}>{formatCountdown(
+                      liveStats.phaseLeftSec ?? workoutStatus.phaseTimeRemaining
+                    )}</Text>
+                    <Text style={styles.liveStatLabel}>INTERVAL LEFT</Text>
+                  </View>
+                </View>
+                <View style={styles.liveProgress}>
+                  <View style={[styles.liveProgressFill, { width: `${(workoutStatus.phaseProgress || 0) * 100}%` }]} />
+                </View>
+              </View>
+            );
+          }
+          return (
+            <View style={styles.liveStats}>
+              <View style={styles.liveRow}>
+                <View style={styles.liveStat}>
+                  <Text style={styles.liveStatValue}>{d.value}</Text>
+                  <Text style={styles.liveStatLabel}>{d.unit === 'mi' ? 'MILES' : 'KILOMETERS'}</Text>
+                </View>
+                <View style={styles.liveStatDivider} />
+                <View style={styles.liveStat}>
+                  <Text style={styles.liveStatValue}>{formatCountdown(liveStats.elapsedSec)}</Text>
+                  <Text style={styles.liveStatLabel}>TIME</Text>
+                </View>
+              </View>
+            </View>
+          );
+        })()}
+
         {/* Start/Pause Button */}
         <TouchableOpacity 
           style={[styles.playButton, isPlaying && styles.playButtonActive]}
@@ -923,7 +1031,13 @@ export default function MetronomeScreenSimple({ navigation, route }) {
 
         {/* Mode-Specific Configuration */}
         {mode === 'fartlek' && (
-          <View style={styles.configSection}>
+          <View
+            style={[styles.configSection, workoutActive && styles.configLocked]}
+            pointerEvents={workoutActive ? 'none' : 'auto'}
+          >
+            {workoutActive && (
+              <Text style={styles.configLockedNote}>LOCKED DURING WORKOUT — END THE RUN TO CHANGE</Text>
+            )}
             <Text style={styles.controlLabel}>FARTLEK CONFIGURATION</Text>
             
             <View style={styles.difficultySection}>
@@ -954,7 +1068,13 @@ export default function MetronomeScreenSimple({ navigation, route }) {
         )}
 
         {mode === 'interval' && (
-          <View style={styles.configSection}>
+          <View
+            style={[styles.configSection, workoutActive && styles.configLocked]}
+            pointerEvents={workoutActive ? 'none' : 'auto'}
+          >
+            {workoutActive && (
+              <Text style={styles.configLockedNote}>LOCKED DURING WORKOUT — END THE RUN TO CHANGE</Text>
+            )}
             <Text style={styles.controlLabel}>INTERVAL CONFIGURATION</Text>
             
             <View style={styles.intervalGrid}>
@@ -1054,34 +1174,7 @@ export default function MetronomeScreenSimple({ navigation, route }) {
           </View>
         )}
 
-        {/* Workout Status */}
-        {workoutStatus.active && (
-          <View style={styles.workoutStatus}>
-            <Text style={styles.controlLabel}>WORKOUT STATUS</Text>
-            <View style={styles.statusCard}>
-              <Text style={styles.statusPhase}>
-                Phase {workoutStatus.currentPhase + 1}/{workoutStatus.workout?.phases?.length || 0}
-              </Text>
-              <Text style={styles.statusDescription}>
-                {workoutStatus.phase?.type?.toUpperCase() || 'Active'}
-              </Text>
-              <Text style={styles.statusIntensity}>
-                {workoutStatus.phase?.intensity === 'hard' ? 'HIGH INTENSITY' :
-                 workoutStatus.phase?.intensity === 'easy' ? 'RECOVERY' : 'MODERATE'}
-              </Text>
-              <View style={styles.progressBar}>
-                <View 
-                  style={[styles.progressFill, { 
-                    width: `${(workoutStatus.phaseProgress || 0) * 100}%` 
-                  }]} 
-                />
-              </View>
-              <Text style={styles.statusTime}>
-                {formatCountdown(workoutStatus.phaseTimeRemaining)} remaining
-              </Text>
-            </View>
-          </View>
-        )}
+        {/* Workout Status card merged into the live stats card (Andy 10/11). */}
 
         {/* FORGE-013: mode buttons replaced by the top tabs. */}
         <View style={styles.modeSection}>
@@ -1103,14 +1196,8 @@ export default function MetronomeScreenSimple({ navigation, route }) {
         </View>
 
         {/* Feeling indicator during workout */}
-        {feelingModifier && isPlaying && (
-          <View style={styles.feelingIndicator}>
-            <Text style={styles.feelingIndicatorText}>
-              {feelingModifier.emoji} {feelingModifier.label}
-              {feelingModifier.cadenceOffset !== 0 && ` (${feelingModifier.cadenceOffset > 0 ? '+' : ''}${feelingModifier.cadenceOffset} SPM)`}
-            </Text>
-          </View>
-        )}
+        {/* Feeling badge ("Good to Go" etc.) removed during workouts, Andy 10/11.
+            The check-in answer still adjusts intensity/cadence. */}
       </View>
 
       {/* Pre-workout check-in modal */}
@@ -1433,6 +1520,85 @@ const styles = StyleSheet.create({
   topTabTextActive: {
     color: '#FFF',
   },
+  liveStats: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+  },
+  liveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  liveHeader: {
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  livePhase: {
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 22,
+    letterSpacing: 0.5,
+    color: '#0A0A0A',
+    textAlign: 'center',
+  },
+  liveIntensity: {
+    fontFamily: 'Archivo_700Bold',
+    fontSize: 12,
+    letterSpacing: 1.5,
+    color: '#6B6B6B',
+    marginTop: 4,
+  },
+  liveHeaderRule: {
+    height: 1,
+    backgroundColor: '#E5E5E5',
+    marginTop: 12,
+    marginBottom: 14,
+    marginHorizontal: 6,
+  },
+  liveStatValueSm: {
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 24,
+    color: '#0A0A0A',
+    fontVariant: ['tabular-nums'],
+  },
+  liveProgress: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#E5E5E5',
+    marginTop: 14,
+    marginHorizontal: 6,
+    overflow: 'hidden',
+  },
+  liveProgressFill: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#0A0A0A',
+  },
+  liveStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  liveStatValue: {
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 32,
+    color: '#0A0A0A',
+    fontVariant: ['tabular-nums'],
+  },
+  liveStatLabel: {
+    fontFamily: 'Archivo_700Bold',
+    fontSize: 11,
+    letterSpacing: 1.5,
+    color: '#6B6B6B',
+    marginTop: 2,
+  },
+  liveStatDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: '#E5E5E5',
+  },
   voiceToggle: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1485,6 +1651,17 @@ const styles = StyleSheet.create({
   },
   modeButtonDescActive: {
     color: '#B0B0B0',
+  },
+  configLocked: {
+    opacity: 0.45,
+  },
+  configLockedNote: {
+    fontFamily: 'Archivo_700Bold',
+    fontSize: 11,
+    letterSpacing: 1.2,
+    color: '#0A0A0A',
+    textAlign: 'center',
+    marginBottom: 12,
   },
   configSection: {
     borderRadius: 14,
