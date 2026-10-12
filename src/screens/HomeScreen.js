@@ -289,7 +289,7 @@ export default function HomeScreen({ navigation }) {
           >
             <View style={styles.profileHeader}>
               <View style={styles.profileIconContainer}>
-                <SFIcon name="checkmark.circle.fill" size={26} />
+                <SFIcon name="checkmark" size={24} color="#FFFFFF" />
               </View>
               <View style={styles.profileInfo}>
                 <Text style={styles.profileTitle}>PROFILE COMPLETE</Text>
@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
   profileIconContainer: {
     width: 56,
     height: 56,
-    borderRadius: 0,
+    borderRadius: 28,
     backgroundColor: '#0A0A0A',
     justifyContent: 'center',
     alignItems: 'center',

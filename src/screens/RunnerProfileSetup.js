@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import SFIcon from '../components/SFIcon';
-import { saveRunnerProfile } from '../utils/storage';
+import { useFocusEffect } from '@react-navigation/native';
+import { saveRunnerProfile, getRunnerProfile } from '../utils/storage';
+import { profileToForm, summaryRows } from '../utils/profileForm';
+import { getQuickStartCadence } from '../services/cadenceModel';
 import { showSuccess, showError } from '../utils/webAlert';
 import TimePickerField from '../components/TimePickerField';
 import analytics from '../services/AnalyticsService';
@@ -47,6 +50,49 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
   });
   const [units, setUnits] = useState('metric'); // metric or imperial
   const [loading, setLoading] = useState(false);
+
+  // Andy 10/11: with a saved profile the Profile tab shows a SUMMARY, and
+  // REFRESH PROFILE re-opens the six steps pre-filled. No profile -> setup.
+  // view: 'loading' | 'summary' | 'form'. editingRef keeps a refocus from
+  // yanking someone out of a refresh they're in the middle of.
+  const [view, setView] = useState('loading');
+  const [savedProfile, setSavedProfile] = useState(null);
+  const editingRef = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      getRunnerProfile()
+        .then((saved) => {
+          if (!alive || editingRef.current) return;
+          if (saved) {
+            setSavedProfile(saved);
+            setView('summary');
+          } else {
+            setSavedProfile(null);
+            setView('form');
+          }
+        })
+        .catch(() => alive && !editingRef.current && setView('form'));
+      return () => { alive = false; };
+    }, [])
+  );
+
+  const startRefresh = () => {
+    const { units: savedUnits, form } = profileToForm(savedProfile);
+    setProfile(form);
+    setUnits(savedUnits);
+    setCurrentStep(1);
+    editingRef.current = true;
+    setView('form');
+    analytics.trackUserAction('profile_refresh_started', {});
+  };
+
+  const cancelRefresh = () => {
+    editingRef.current = false;
+    setCurrentStep(1);
+    setView('summary');
+  };
   
   const totalSteps = 6;
 
@@ -205,7 +251,9 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
         
         // Metadata
         units,
-        createdAt: new Date().toISOString(),
+        // Refresh keeps the original creation time (Andy 10/11).
+        createdAt: (editingRef.current && savedProfile?.createdAt) || new Date().toISOString(),
+        ...(editingRef.current ? { updatedAt: new Date().toISOString() } : {}),
         version: '2.0'
       };
 
@@ -215,8 +263,13 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
         throw new Error('Failed to save profile to storage');
       }
 
+      // A refresh is not a new signup — keep it out of the onboarding funnel.
+      const wasRefresh = editingRef.current;
+      if (wasRefresh) {
+        analytics.track('profile_refreshed', { experience: profileData.experience });
+      }
       // Funnel: did the tester actually finish setup, and how complete is it?
-      analytics.track('onboarding_completed', {
+      if (!wasRefresh) analytics.track('onboarding_completed', {
         // FORGE-006: which door they came through — value-first quick start vs
         // the classic home CTA — so we can measure which converts better.
         source: route?.params?.source || 'home',
@@ -225,6 +278,10 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
         hasComfortablePace: !!profile.comfortablePace,
         hasCurrentCadence: !!profile.currentCadence,
       });
+
+      editingRef.current = false;
+      setSavedProfile(profileData);
+      setView('summary');
 
       // Use web-compatible success message
       showSuccess(
@@ -834,10 +891,62 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
       </View>
     </View>
   );
+  if (view === 'loading') {
+    return <View style={styles.container} />;
+  }
+
+  if (view === 'summary' && savedProfile) {
+    const rows = summaryRows(savedProfile);
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Your Runner Profile</Text>
+        </View>
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={[styles.contentContainer, { paddingBottom: 48 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.profileSummaryCard}>
+            <View style={styles.summaryHead}>
+              <View style={styles.summaryCheck}>
+                <SFIcon name="checkmark" size={18} color="#FFFFFF" />
+              </View>
+              <View>
+                <Text style={styles.profileSummaryTitle}>PROFILE COMPLETE</Text>
+                <Text style={styles.summaryCadence}>
+                  Your cadence: {getQuickStartCadence(savedProfile)} SPM
+                </Text>
+              </View>
+            </View>
+            {rows.map(([label, value]) => (
+              <View key={label} style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>{label}</Text>
+                <Text style={styles.summaryValue}>{value}</Text>
+              </View>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={styles.refreshButton}
+            onPress={startRefresh}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+          >
+            <Text style={styles.refreshButtonText}>REFRESH PROFILE</Text>
+          </TouchableOpacity>
+          <Text style={styles.refreshHint}>
+            Walk through setup again. Your current answers are filled in, so change only what you need.
+          </Text>
+        </ScrollView>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Profile Setup</Text>
+        <Text style={styles.title}>{editingRef.current ? 'Refresh Profile' : 'Profile Setup'}</Text>
         {renderStepIndicator()}
       </View>
 
@@ -861,6 +970,11 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
       </KeyboardAvoidingView>
 
       <View style={styles.navigation}>
+        {currentStep === 1 && editingRef.current && (
+          <TouchableOpacity style={styles.navButton} onPress={cancelRefresh}>
+            <Text style={styles.navButtonText}>Cancel</Text>
+          </TouchableOpacity>
+        )}
         {currentStep > 1 && (
           <TouchableOpacity style={styles.navButton} onPress={prevStep}>
             <Text style={styles.navButtonText}>← Previous</Text>
@@ -880,7 +994,7 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
             disabled={loading}
           >
             <Text style={styles.navButtonPrimaryText}>
-              {loading ? 'Creating...' : 'Complete'}
+              {loading ? 'Saving...' : 'Complete'}
             </Text>
           </TouchableOpacity>
         )}
@@ -889,6 +1003,80 @@ export default function RunnerProfileSetup({ navigation, onComplete, route }) {
   );
 }
 const styles = StyleSheet.create({
+  profileSummaryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    padding: 20,
+    marginBottom: 20,
+  },
+  summaryHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  summaryCheck: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#0A0A0A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  profileSummaryTitle: {
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 15,
+    letterSpacing: 1,
+    color: '#0A0A0A',
+  },
+  summaryCadence: {
+    fontFamily: 'Archivo_400Regular',
+    fontSize: 13,
+    color: '#6B6B6B',
+    marginTop: 2,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  summaryLabel: {
+    fontFamily: 'Archivo_400Regular',
+    fontSize: 14,
+    color: '#6B6B6B',
+  },
+  summaryValue: {
+    fontFamily: 'Archivo_700Bold',
+    fontSize: 14,
+    color: '#0A0A0A',
+    flexShrink: 1,
+    textAlign: 'right',
+    marginLeft: 16,
+  },
+  refreshButton: {
+    backgroundColor: '#0A0A0A',
+    borderRadius: 14,
+    paddingVertical: 18,
+    alignItems: 'center',
+  },
+  refreshButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 15,
+    letterSpacing: 1.5,
+  },
+  refreshHint: {
+    fontFamily: 'Archivo_400Regular',
+    fontSize: 12,
+    color: '#6B6B6B',
+    textAlign: 'center',
+    marginTop: 10,
+    paddingHorizontal: 12,
+  },
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
