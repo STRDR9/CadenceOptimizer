@@ -1396,14 +1396,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6B6B6B',
   },
-  audioControls: {
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-  },
   controlLabel: {
     fontFamily: 'Archivo_700Bold',
     fontSize: 12,
@@ -1411,78 +1403,6 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
     letterSpacing: 2.5,
     textTransform: 'uppercase',
-  },
-  audioToggle: {
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    marginBottom: 16,
-  },
-  audioToggleActive: {
-    backgroundColor: '#0A0A0A',
-    borderColor: '#0A0A0A',
-  },
-  audioToggleText: {
-    fontFamily: 'Archivo_700Bold',
-    fontSize: 15,
-    color: '#0A0A0A',
-    letterSpacing: 1,
-  },
-  audioToggleTextActive: {
-    color: '#FFFFFF',
-  },
-  volumeControl: {
-    marginTop: 8,
-  },
-  volumeLabel: {
-    fontFamily: 'Archivo_400Regular',
-    fontSize: 13,
-    color: '#6B6B6B',
-    marginBottom: 8,
-    letterSpacing: 0.5,
-  },
-  volumeSlider: {
-    width: '100%',
-    height: 40,
-  },
-  presets: {
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-  },
-  presetButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  presetButton: {
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    flex: 1,
-    marginHorizontal: 4,
-    alignItems: 'center',
-  },
-  presetButtonActive: {
-    backgroundColor: '#0A0A0A',
-    borderColor: '#0A0A0A',
-  },
-  presetButtonText: {
-    fontFamily: 'Archivo_700Bold',
-    fontSize: 15,
-    color: '#0A0A0A',
-  },
-  presetButtonTextActive: {
-    color: '#FFFFFF',
   },
   modeSection: {
     borderRadius: 14,
@@ -1614,44 +1534,6 @@ const styles = StyleSheet.create({
     color: '#0A0A0A',
     marginRight: 12,
   },
-  modeButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  modeButton: {
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    width: '48%',
-    marginBottom: 12,
-    alignItems: 'center',
-  },
-  modeButtonActive: {
-    backgroundColor: '#0A0A0A',
-    borderColor: '#0A0A0A',
-  },
-  modeButtonText: {
-    fontFamily: 'Archivo_700Bold',
-    fontSize: 14,
-    color: '#0A0A0A',
-    marginBottom: 4,
-    letterSpacing: 0.5,
-  },
-  modeButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  modeButtonDesc: {
-    fontFamily: 'Archivo_400Regular',
-    fontSize: 11,
-    color: '#6B6B6B',
-  },
-  modeButtonDescActive: {
-    color: '#B0B0B0',
-  },
   configLocked: {
     opacity: 0.45,
   },
@@ -1717,100 +1599,6 @@ const styles = StyleSheet.create({
   },
   difficultyButtonDescActive: {
     color: '#B0B0B0',
-  },
-  coachingToggle: {
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-  },
-  coachingToggleActive: {
-    backgroundColor: '#0A0A0A',
-    borderColor: '#0A0A0A',
-  },
-  coachingToggleText: {
-    fontFamily: 'Archivo_700Bold',
-    fontSize: 15,
-    color: '#0A0A0A',
-  },
-  coachingToggleTextActive: {
-    color: '#FFFFFF',
-  },
-  workoutStatus: {
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-  },
-  statusCard: {
-    alignItems: 'center',
-  },
-  statusPhase: {
-    fontFamily: 'Archivo_800ExtraBold',
-    fontSize: 18,
-    color: '#0A0A0A',
-    marginBottom: 8,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  statusDescription: {
-    fontFamily: 'Archivo_500Medium',
-    fontSize: 15,
-    color: '#6B6B6B',
-    marginBottom: 8,
-  },
-  statusIntensity: {
-    fontFamily: 'Archivo_700Bold',
-    fontSize: 13,
-    color: '#0A0A0A',
-    marginBottom: 16,
-    letterSpacing: 1,
-  },
-  progressBar: {
-    borderRadius: 4,
-    width: '100%',
-    height: 6,
-    backgroundColor: '#E5E5E5',
-    marginBottom: 12,
-  },
-  progressFill: {
-    borderRadius: 4,
-    height: '100%',
-    backgroundColor: '#0A0A0A',
-  },
-  statusTime: {
-    fontFamily: 'Archivo_400Regular',
-    fontSize: 13,
-    color: '#6B6B6B',
-    letterSpacing: 0.5,
-  },
-  webNotice: {
-    borderRadius: 14,
-    backgroundColor: '#F4F4F4',
-    padding: 16,
-    marginBottom: 24,
-    borderLeftWidth: 3,
-    borderLeftColor: '#0A0A0A',
-  },
-  webNoticeText: {
-    fontFamily: 'Archivo_700Bold',
-    fontSize: 15,
-    color: '#0A0A0A',
-    marginBottom: 8,
-  },
-  webNoticeTitle: {
-    fontFamily: 'Archivo_800ExtraBold',
-  },
-  webNoticeDesc: {
-    fontFamily: 'Archivo_400Regular',
-    fontSize: 14,
-    color: '#6B6B6B',
-    lineHeight: 20,
   },
   intervalGrid: {
     marginBottom: 20,
@@ -1901,20 +1689,6 @@ const styles = StyleSheet.create({
     minWidth: 50,
     textAlign: 'center',
   },
-  feelingIndicator: {
-    borderRadius: 14,
-    backgroundColor: '#F4F4F4',
-    padding: 12,
-    marginBottom: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-  },
-  feelingIndicatorText: {
-    fontFamily: 'Archivo_600SemiBold',
-    fontSize: 14,
-    color: '#0A0A0A',
-  },
   musicButton: {
     borderRadius: 14,
     flexDirection: 'row',
@@ -1924,10 +1698,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     borderWidth: 1,
     borderColor: '#E5E5E5',
-  },
-  musicButtonIcon: {
-    fontSize: 26,
-    marginRight: 16,
   },
   musicButtonContent: {
     flex: 1,
@@ -1943,11 +1713,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6B6B6B',
     marginTop: 3,
-  },
-  musicButtonArrow: {
-    fontFamily: 'Archivo_700Bold',
-    fontSize: 20,
-    color: '#0A0A0A',
   },
   musicUnavailable: {
     backgroundColor: '#FAFAFA',
