@@ -639,11 +639,18 @@ export default function MetronomeScreenSimple({ navigation, route }) {
     navigation?.setParams({ quickStart: undefined });
     if (isPlayingRef.current || workoutActive) return; // never stomp a live session
     quickStartSessionRef.current = true;
-    const qsCadence = getQuickStartCadence();
-    setCadence(qsCadence);
     setRunTab('run'); // FORGE-013: quick start always lands on the Run tab
     setMode('none'); // stock settings: plain metronome, no workout engine
-    startWorkout(null, { cadence: qsCadence, mode: 'none' });
+    // Andy 10/11: profiled runners quick-start at THEIR cadence (Home's START A
+    // RUN shows that number); no profile -> stock QUICK_START_CADENCE.
+    (async () => {
+      let profile = null;
+      try { profile = await getRunnerProfile(); } catch (_e) { profile = null; }
+      if (isPlayingRef.current) return; // a manual start won the race
+      const qsCadence = getQuickStartCadence(profile);
+      setCadence(qsCadence);
+      startWorkout(null, { cadence: qsCadence, mode: 'none' });
+    })();
     // Deliberately keyed to the quickStart param only; startWorkout/workoutActive
     // are read at fire time and must not re-trigger an audio start.
     // eslint-disable-next-line react-hooks/exhaustive-deps

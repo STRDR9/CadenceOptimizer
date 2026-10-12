@@ -1,5 +1,5 @@
 // FORGE-013: m:ss countdown formatting (Bridget: raw seconds read terribly).
-import { formatCountdown, formatDistance, describePhase } from '../format';
+import { formatCountdown, formatDistance, describePhase, formatHeight, formatWeight } from '../format';
 
 describe('formatCountdown', () => {
   it('formats seconds as m:ss', () => {
@@ -53,5 +53,20 @@ describe('describePhase', () => {
     expect(describePhase({ type: 'fartlek', intensity: 'hard' }, 1, 12)).toEqual({ title: 'FARTLEK 1 OF 10', tag: 'HARD' });
     expect(describePhase({ type: 'fartlek', intensity: 'easy' }, 10, 12)).toEqual({ title: 'FARTLEK 10 OF 10', tag: 'EASY' });
     expect(describePhase({ type: 'fartlek', intensity: 'warmup' }, 0, 12)).toEqual({ title: 'WARMUP', tag: 'EASY' });
+  });
+});
+
+describe('profile units (Home card)', () => {
+  it('imperial height as feet/inches, weight in lb', () => {
+    expect(formatHeight({ units: 'imperial', height: 177.8 })).toBe(`5'10\"`);
+    expect(formatWeight({ units: 'imperial', weight: 72.6 })).toBe('160');
+  });
+  it('metric stays cm / kg', () => {
+    expect(formatHeight({ units: 'metric', height: 177.8 })).toBe('178');
+    expect(formatWeight({ units: 'metric', weight: 72.6 })).toBe('73');
+  });
+  it('missing values -> 0, never NaN', () => {
+    expect(formatHeight(null)).toBe('0');
+    expect(formatWeight({ units: 'imperial' })).toBe('0');
   });
 });

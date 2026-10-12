@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 0,
+    borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 16,
   },

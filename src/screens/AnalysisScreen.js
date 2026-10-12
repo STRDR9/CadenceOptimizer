@@ -558,7 +558,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     marginBottom: 20,
     marginHorizontal: 16,
-    borderRadius: 0,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#E5E5E5',
   },
@@ -582,7 +582,7 @@ const styles = StyleSheet.create({
   uploadButton: {
     backgroundColor: '#0A0A0A',
     padding: 20,
-    borderRadius: 0,
+    borderRadius: 14,
     alignItems: 'center',
   },
   uploadButtonText: {
@@ -597,7 +597,7 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: 'rgba(255, 59, 48, 0.1)',
     marginBottom: 20,
-    borderRadius: 0,
+    borderRadius: 14,
     marginHorizontal: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 59, 48, 0.3)',
@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     backgroundColor: '#F4F4F4',
-    borderRadius: 0,
+    borderRadius: 14,
     padding: 20,
     marginBottom: 20,
     borderWidth: 1,
@@ -664,7 +664,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
     padding: 16,
-    borderRadius: 0,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#E5E5E5',
     marginHorizontal: 6,
@@ -701,7 +701,7 @@ const styles = StyleSheet.create({
   zoneBar: {
     height: 12,
     backgroundColor: '#E5E5E5',
-    borderRadius: 0,
+    borderRadius: 6, // half height -> pill
     overflow: 'hidden',
     marginBottom: 12,
   },
@@ -718,7 +718,7 @@ const styles = StyleSheet.create({
   },
   recommendationCard: {
     padding: 16,
-    borderRadius: 0,
+    borderRadius: 14,
     marginBottom: 16,
     borderLeftWidth: 4,
     borderWidth: 1,
@@ -762,7 +762,7 @@ const styles = StyleSheet.create({
     width: '48%',
     backgroundColor: '#F4F4F4',
     padding: 16,
-    borderRadius: 0,
+    borderRadius: 14,
     marginBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -788,7 +788,7 @@ const styles = StyleSheet.create({
   },
   noteCard: {
     backgroundColor: 'rgba(33, 150, 243, 0.1)',
-    borderRadius: 0,
+    borderRadius: 14,
     padding: 16,
     marginBottom: 24,
     borderLeftWidth: 4,
@@ -823,7 +823,7 @@ const styles = StyleSheet.create({
   },
   lapCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 0,
+    borderRadius: 14,
     padding: 16,
     marginRight: 12,
     minWidth: 120,
@@ -882,7 +882,7 @@ const styles = StyleSheet.create({
   insightCard: {
     width: '48%',
     backgroundColor: '#F4F4F4',
-    borderRadius: 0,
+    borderRadius: 14,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,

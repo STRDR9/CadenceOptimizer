@@ -4,8 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { getRunnerProfile } from '../utils/storage';
 import SFIcon from '../components/SFIcon';
+import { formatHeight, formatWeight } from '../utils/format';
 import analytics from '../services/AnalyticsService';
-import { QUICK_START_CADENCE } from '../services/cadenceModel';
+import { QUICK_START_CADENCE, getQuickStartCadence } from '../services/cadenceModel';
 
 export default function HomeScreen({ navigation }) {
   const [hasProfile, setHasProfile] = useState(false);
@@ -210,6 +211,24 @@ export default function HomeScreen({ navigation }) {
       {/* Collapsing wordmark */}
       <AnimatedLogo subheader="Running and Cadence Optimizer" />
 
+      {/* Andy 10/11: finishing the profile used to REMOVE the quick-start
+          button. Profiled home now leads with it, at the runner's own cadence. */}
+      <TouchableOpacity
+        style={styles.startRunButton}
+        onPress={() => {
+          analytics.track('quick_start_used', { source: 'home_profiled' });
+          navigation.navigate('Metronome', { quickStart: true });
+        }}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel="Start a run"
+      >
+        <Text style={styles.startRunButtonText}>START A RUN</Text>
+        <Text style={styles.startRunButtonSub}>
+          {getQuickStartCadence(profile)} SPM · your cadence
+        </Text>
+      </TouchableOpacity>
+
       {/* Quick Actions Section */}
       <View style={styles.actionsSection}>
         <Text style={styles.sectionTitle}>QUICK ACTIONS</Text>
@@ -270,7 +289,7 @@ export default function HomeScreen({ navigation }) {
           >
             <View style={styles.profileHeader}>
               <View style={styles.profileIconContainer}>
-                <Text style={styles.profileIcon}>✅</Text>
+                <SFIcon name="checkmark" size={24} color="#FFFFFF" />
               </View>
               <View style={styles.profileInfo}>
                 <Text style={styles.profileTitle}>PROFILE COMPLETE</Text>
@@ -280,17 +299,18 @@ export default function HomeScreen({ navigation }) {
               </View>
             </View>
             <View style={styles.profileStats}>
+              {/* Andy 10/11: stats in the runner's units (was always CM/KG). */}
               <View style={styles.profileStat}>
-                <Text style={styles.profileStatValue}>{Math.round(profile?.height)}</Text>
-                <Text style={styles.profileStatLabel}>CM</Text>
+                <Text style={styles.profileStatValue}>{formatHeight(profile)}</Text>
+                <Text style={styles.profileStatLabel}>{profile?.units === 'imperial' ? 'HEIGHT' : 'CM'}</Text>
               </View>
               <View style={styles.profileStat}>
                 <Text style={styles.profileStatValue}>{profile?.age}</Text>
                 <Text style={styles.profileStatLabel}>AGE</Text>
               </View>
               <View style={styles.profileStat}>
-                <Text style={styles.profileStatValue}>{Math.round(profile?.weight)}</Text>
-                <Text style={styles.profileStatLabel}>KG</Text>
+                <Text style={styles.profileStatValue}>{formatWeight(profile)}</Text>
+                <Text style={styles.profileStatLabel}>{profile?.units === 'imperial' ? 'LB' : 'KG'}</Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -394,16 +414,13 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 56,
     height: 56,
-    borderRadius: 0,
+    borderRadius: 12,
     backgroundColor: '#F4F4F4',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
     borderWidth: 1,
     borderColor: '#E5E5E5',
-  },
-  cardIcon: {
-    fontSize: 24,
   },
   cardContent: {
     flex: 1,
@@ -423,54 +440,51 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_500Medium',
     fontWeight: '500',
   },
-  cardArrow: {
-    position: 'absolute',
-    top: 24,
-    right: 24,
-    width: 32,
-    height: 32,
-    borderRadius: 0,
-    backgroundColor: '#0A0A0A',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  arrowText: {
-    fontSize: 18,
-    color: '#FFFFFF',
-    fontFamily: 'Archivo_800ExtraBold',
-    fontWeight: '800',
-  },
 
   // Specialized Card Styles
   analysisCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#0A0A0A',
     backgroundColor: '#F4F4F4',
   },
   metronomeCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#0A0A0A',
     backgroundColor: '#F4F4F4',
   },
   targetsCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#0A0A0A',
     backgroundColor: '#F4F4F4',
   },
   profileCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#0A0A0A',
     backgroundColor: '#F4F4F4',
   },
 
   // Profile Complete Card Styles
   profileCompleteCard: {
     backgroundColor: '#F4F4F4',
-    borderRadius: 0,
+    borderRadius: 14,
     padding: 24,
     marginBottom: 16,
-    borderWidth: 2,
-    borderColor: '#0A0A0A',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+  },
+  startRunButton: {
+    backgroundColor: '#0A0A0A',
+    marginHorizontal: 24,
+    paddingVertical: 20,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  startRunButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Archivo_800ExtraBold',
+    letterSpacing: 1.5,
+  },
+  startRunButtonSub: {
+    color: '#BDBDBD',
+    fontSize: 12,
+    fontFamily: 'Archivo_400Regular',
+    marginTop: 4,
+    letterSpacing: 0.5,
   },
   profileHeader: {
     flexDirection: 'row',
@@ -480,14 +494,11 @@ const styles = StyleSheet.create({
   profileIconContainer: {
     width: 56,
     height: 56,
-    borderRadius: 0,
+    borderRadius: 28,
     backgroundColor: '#0A0A0A',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
-  },
-  profileIcon: {
-    fontSize: 24,
   },
   profileInfo: {
     flex: 1,
@@ -511,7 +522,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     backgroundColor: '#FFFFFF',
-    borderRadius: 0,
+    borderRadius: 14,
     paddingVertical: 16,
     borderWidth: 1,
     borderColor: '#E5E5E5',
@@ -581,13 +592,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1.5,
   },
-  setupButtonArrow: {
-    color: '#FFF',
-    fontSize: 22,
-    fontFamily: 'Archivo_800ExtraBold',
-    fontWeight: '800',
-    marginLeft: 12,
-  },
   quickStartButton: {
     backgroundColor: '#FFFFFF',
     marginHorizontal: 24,
@@ -636,10 +640,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#E5E5E5',
-  },
-  featureIcon: {
-    fontSize: 24,
-    marginRight: 16,
   },
   featureIconSf: {
     marginRight: 14,
