@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 56,
     height: 56,
-    borderRadius: 0,
+    borderRadius: 12,
     backgroundColor: '#F4F4F4',
     justifyContent: 'center',
     alignItems: 'center',
@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     backgroundColor: '#FFFFFF',
-    borderRadius: 0,
+    borderRadius: 14,
     paddingVertical: 16,
     borderWidth: 1,
     borderColor: '#E5E5E5',
