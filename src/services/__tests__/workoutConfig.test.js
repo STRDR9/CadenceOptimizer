@@ -1,7 +1,7 @@
 // Andy 10/11 device test: "do the interval config buttons actually change the
 // workout?" Locks the config -> phases contract so they can't silently drift.
 
-import { WorkoutEngine } from '../WorkoutEngine';
+import { WorkoutEngine, FARTLEK_DIFFICULTY, fartlekRangeLabel } from '../WorkoutEngine';
 
 jest.mock('../../utils/storage', () => ({
   getRunnerProfile: jest.fn(async () => ({})),
@@ -116,5 +116,31 @@ describe('interval voice cues say the warmup / cooldown length', () => {
     expect(w.phases[w.phases.length - 1].coachingCues[0].message).toBe(
       'Cooldown. 5 minutes easy at 160. Nice work.'
     );
+  });
+});
+
+describe('fartlek difficulty labels match what the engine does (10/12 bug)', () => {
+  test('labels are generated from the engine ranges', () => {
+    expect(fartlekRangeLabel('beginner')).toBe('\u221210 / +15 SPM');
+    expect(fartlekRangeLabel('intermediate')).toBe('\u221215 / +20 SPM');
+    expect(fartlekRangeLabel('advanced')).toBe('\u221220 / +25 SPM');
+    expect(fartlekRangeLabel('elite')).toBe('\u221225 / +30 SPM');
+  });
+
+  test('every difficulty label reflects its exact engine range', () => {
+    Object.entries(FARTLEK_DIFFICULTY).forEach(([key, d]) => {
+      const [lo, hi] = d.cadenceRange;
+      const label = fartlekRangeLabel(key);
+      expect(label).toContain(String(Math.abs(lo)));
+      expect(label).toContain(`+${hi}`);
+    });
+  });
+
+  test('no hand-typed ± labels left in the run screen', () => {
+    const fs = require('fs');
+    const path = require('path');
+    // eslint-disable-next-line no-undef -- jest runs in Node; __dirname exists
+    const src = fs.readFileSync(path.join(__dirname, '../../screens/MetronomeScreen.js'), 'utf8');
+    expect(src).not.toMatch(/desc: '\u00b1\d+ SPM'/);
   });
 });
