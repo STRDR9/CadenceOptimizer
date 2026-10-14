@@ -21,6 +21,47 @@ export const CADENCE_MIN = 90;
 export const CADENCE_MAX = 220;
 const clampCadence = (c) => Math.max(CADENCE_MIN, Math.min(CADENCE_MAX, c));
 
+// Fartlek difficulty — the SINGLE source of truth for cadence swings.
+// The difficulty buttons build their label text from these numbers
+// (fartlekRangeLabel), so the UI can never promise a different range than
+// the engine delivers again (10/12 bug: labels said ±5…±20, engine did
+// −10/+15…−25/+30; Andy chose to keep the engine and fix the labels).
+export const FARTLEK_DIFFICULTY = {
+  beginner: {
+    cadenceRange: [-10, +15], // -10 to +15 SPM from base
+    intervalRange: [45, 180], // 45s to 3min intervals
+    changeFrequency: 0.3, // 30% chance of change per interval
+    maxConsecutiveHard: 2,
+  },
+  intermediate: {
+    cadenceRange: [-15, +20],
+    intervalRange: [30, 240],
+    changeFrequency: 0.4,
+    maxConsecutiveHard: 3,
+  },
+  advanced: {
+    cadenceRange: [-20, +25],
+    intervalRange: [20, 300],
+    changeFrequency: 0.5,
+    maxConsecutiveHard: 4,
+  },
+  elite: {
+    cadenceRange: [-25, +30],
+    intervalRange: [15, 360],
+    changeFrequency: 0.6,
+    maxConsecutiveHard: 5,
+  },
+};
+
+/** Button text for a difficulty, built from the engine range: "−10 / +15 SPM". */
+export function fartlekRangeLabel(difficulty) {
+  const d = FARTLEK_DIFFICULTY[difficulty];
+  if (!d) return '';
+  const [lo, hi] = d.cadenceRange;
+  const fmt = (n) => (n < 0 ? `\u2212${Math.abs(n)}` : `+${n}`);
+  return `${fmt(lo)} / ${fmt(hi)} SPM`;
+}
+
 export class WorkoutEngine {
   constructor() {
     this.currentWorkout = null;
@@ -126,35 +167,7 @@ export class WorkoutEngine {
   generateFartlekWorkout(config, profile) {
     const { duration, difficulty, baseCadence, terrainAware, coachingEnabled } = config;
     
-    // Difficulty settings
-    const difficultySettings = {
-      beginner: {
-        cadenceRange: [-10, +15], // -10 to +15 SPM from base
-        intervalRange: [45, 180], // 45s to 3min intervals
-        changeFrequency: 0.3, // 30% chance of change per interval
-        maxConsecutiveHard: 2,
-      },
-      intermediate: {
-        cadenceRange: [-15, +20],
-        intervalRange: [30, 240],
-        changeFrequency: 0.4,
-        maxConsecutiveHard: 3,
-      },
-      advanced: {
-        cadenceRange: [-20, +25],
-        intervalRange: [20, 300],
-        changeFrequency: 0.5,
-        maxConsecutiveHard: 4,
-      },
-      elite: {
-        cadenceRange: [-25, +30],
-        intervalRange: [15, 360],
-        changeFrequency: 0.6,
-        maxConsecutiveHard: 5,
-      }
-    };
-
-    const settings = difficultySettings[difficulty];
+    const settings = FARTLEK_DIFFICULTY[difficulty] || FARTLEK_DIFFICULTY.intermediate;
     const phases = [];
     let currentTime = 0;
     let consecutiveHard = 0;

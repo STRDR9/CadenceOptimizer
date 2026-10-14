@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MetronomeService from '../services/MetronomeService';
 import LocationService from '../services/LocationService';
 import TerrainDetector from '../services/TerrainDetector';
-import WorkoutEngine, { workoutStatsToEventProps } from '../services/WorkoutEngine';
+import WorkoutEngine, { workoutStatsToEventProps, fartlekRangeLabel } from '../services/WorkoutEngine';
 import CoachingVoiceService from '../services/CoachingVoiceService';
 import SFIcon from '../components/SFIcon';
 import analytics from '../services/AnalyticsService';
@@ -1051,10 +1051,11 @@ export default function MetronomeScreenSimple({ navigation, route }) {
               <Text style={styles.configLabel}>Difficulty Level</Text>
               <View style={styles.difficultyButtons}>
                 {[
-                  { key: 'beginner', label: 'BEGINNER', desc: '±5 SPM' },
-                  { key: 'intermediate', label: 'INTERMEDIATE', desc: '±10 SPM' },
-                  { key: 'advanced', label: 'ADVANCED', desc: '±15 SPM' },
-                  { key: 'elite', label: 'ELITE', desc: '±20 SPM' },
+                  // desc is generated from the engine's ranges — never retype it
+                  { key: 'beginner', label: 'BEGINNER', desc: fartlekRangeLabel('beginner') },
+                  { key: 'intermediate', label: 'INTERMEDIATE', desc: fartlekRangeLabel('intermediate') },
+                  { key: 'advanced', label: 'ADVANCED', desc: fartlekRangeLabel('advanced') },
+                  { key: 'elite', label: 'ELITE', desc: fartlekRangeLabel('elite') },
                 ].map((diff) => (
                   <TouchableOpacity
                     key={diff.key}
